@@ -10,12 +10,13 @@ import DB
 import Data.ByteString.Lazy qualified as BSL
 import Env
 import Error
-import HBS2.Clock
 import HBS2.Data.Types
 import HBS2.Data.Types.SignedBox
 import HBS2.Merkle
 import HBS2.Net.Auth.Credentials hiding (encode)
+import HBS2.Net.Proto.Notify
 import HBS2.OrDie
+import HBS2.Peer.Notify
 import HBS2.Peer.Proto.RefChan
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.StorageClient
@@ -30,11 +31,13 @@ refChanWorker :: (MonadUnliftIO m, MonadReader Env m) => m ()
 refChanWorker = do
   refChans' <- asks (refChans . config)
   chatUpdatesChan' <- asks chatUpdatesChan
-  forever do
-    forM_ refChans' \refChan -> do
-      loadChatMessages refChan
-      atomically $ writeTChan chatUpdatesChan' refChan
-    pause @Seconds 2
+  sink <- asks refChanNotifySink
+  notifyWorkers <- forM refChans' \refChan -> async do
+    runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChan) $ \case
+      RefChanNotifyData _ _ -> do
+        loadChatMessages refChan
+        atomically $ writeTChan chatUpdatesChan' refChan
+  void $ waitAnyCancel notifyWorkers
 
 loadChatMessages :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 loadChatMessages refChan = do

@@ -10,8 +10,10 @@ import DBPipe.SQLite
 import Data.Map (Map)
 import Data.Map.Strict qualified as Map
 import Data.String (IsString (..))
+import HBS2.Net.Proto.Notify
 import HBS2.OrDie
 import HBS2.Peer.CLI.Detect
+import HBS2.Peer.Notify
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.API.Storage
 import HBS2.Peer.RPC.Client.Unix
@@ -25,6 +27,7 @@ data Env = Env
     refChanAPI :: ServiceCaller RefChanAPI UNIX,
     storageAPI :: ServiceCaller StorageAPI UNIX,
     rpcSockPath :: FilePath,
+    refChanNotifySink :: NotifySink (RefChanEvents L4Proto) UNIX,
     dbEnv :: DBPipeEnv,
     wsSessionsTVar :: TVar (Map WSSessionID WSSession),
     chatUpdatesChan :: TChan MyRefChan
@@ -39,6 +42,7 @@ initEnv config = do
   dbEnv <- initDBEnv $ dbPath config
   wsSessionsTVar <- newTVarIO Map.empty
   chatUpdatesChan <- newBroadcastTChanIO
+  refChanNotifySink <- newNotifySink
   pure $ Env {..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv
