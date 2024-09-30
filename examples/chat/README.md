@@ -33,7 +33,7 @@
    hbs2-cli [hbs2:refchan:create test-refchan-head.txt]
    ```
 
-   This command will print reflog key, save it somwhere, we'll need it later. It will also create relog key in hbs2-keyman folder.
+   This command will print reflog key, save it somwhere, we'll need it later. It will also create reflog key in hbs2-keyman folder.
 
 ## Create sigil
 
