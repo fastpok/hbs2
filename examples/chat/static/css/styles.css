@@ -80,13 +80,13 @@
   border: none;
   padding: calc(var(--pico-spacing) * 0.5);
   box-shadow: none;
-  color: var(--pico-color);
+  color: var(--pico-code-kbd-background-color);
   text-align: left;
 }
 
-.chat-button:is(:hover, :active, :focus) {
+.chat-button:is(:hover) {
   color: var(--pico-contrast-hover);
-  background-color: var(--pico-secondary-hover-background);
+  background-color: var(--pico-contrast-focus);
 }
 
 .content-header {

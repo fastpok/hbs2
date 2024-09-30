@@ -28,15 +28,16 @@ mainPage = do
       htmlBody refChans'
 
 htmlBody :: [MyRefChan] -> Html ()
-htmlBody refChans' = body_ [class_ "h-screen"] $ do
+htmlBody refChans' = body_ [class_ "h-screen", checkLogin] $ do
   div_ [class_ "wrapper"] $ do
     div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
     div_ [class_ "sidebar wrapper-item chat-buttons"] $ do
       case refChans' of
         [] -> p_ $ small_ "There are no chats available"
-        refChans'' -> forM_ refChans'' $ \refChan ->
-          let refChanText = shorten 8 $ Text.pack $ show $ pretty $ AsBase58 refChan
-           in button_ [class_ "outline chat-button"] $ toHtml refChanText
+        someRefChans -> forM_ someRefChans $ \refChan ->
+          let refChanText = Text.pack $ show $ pretty $ AsBase58 refChan
+              refChanShortenedText = shorten 8 refChanText
+           in button_ [class_ "outline chat-button", data_ "value" refChanText, handleChatSelect] $ toHtml refChanShortenedText
     div_ [class_ "content-header wrapper-item header-color"] $ do
       div_ "Chat name"
       div_ [class_ "header-buttons"] $ do
@@ -59,8 +60,18 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
         createMessage "my-message" "Гэндальф" "Тогда вперёд. Поговорим на привале. Запасайтесь силой, пригодится." "21:40"
       div_ [class_ "message-input-wrapper"] $
         fieldset_ [role_ "group", class_ "mb-0"] $ do
-          textarea_ [class_ "message-input", name_ "input", placeholder_ "Message", ariaLabel_ "Message", rows_ "1", oninput_ "autoResize(this)"] ""
-          button_ [class_ "outline send-message"] $ makeIcon PaperAirplane
+          textarea_
+            [ class_ "message-input",
+              id_ "message-input",
+              name_ "input",
+              placeholder_ "Message",
+              ariaLabel_ "Message",
+              rows_ "1",
+              oninput_ "autoResize(this)",
+              handleMessageInput
+            ]
+            ""
+          button_ [class_ "outline send-message", handleSendMessageOnClick] $ makeIcon PaperAirplane
     div_ [class_ "members-header wrapper-item header-color"] "Members"
     div_ [class_ "members wrapper-item"] $ do
       createMember "Гэндальф"
@@ -72,33 +83,33 @@ createMember username = p_ [class_ $ nameToColorClass username] $ small_ $ toHtm
 
 colorNames :: [Text]
 colorNames =
-  [ "red"
-  , "pink"
-  , "fuchsia"
-  , "purple"
-  , "violet"
-  , "indigo"
-  , "blue"
-  , "azure"
-  , "cyan"
-  , "jade"
-  , "green"
-  , "lime"
-  , "yellow"
-  , "amber"
-  , "pumpkin"
-  , "orange"
-  , "sand"
-  , "grey"
-  , "zinc"
-  , "slate"
+  [ "red",
+    "pink",
+    "fuchsia",
+    "purple",
+    "violet",
+    "indigo",
+    "blue",
+    "azure",
+    "cyan",
+    "jade",
+    "green",
+    "lime",
+    "yellow",
+    "amber",
+    "pumpkin",
+    "orange",
+    "sand",
+    "grey",
+    "zinc",
+    "slate"
   ]
 
 nameToColorClass :: Text -> Text
 nameToColorClass t =
   "username-" <> color
- where
-  color = colorNames !! (hash t `mod` length colorNames)
+  where
+    color = colorNames !! (hash t `mod` length colorNames)
 
 createMessage :: Text -> Text -> Html () -> Html () -> Html ()
 createMessage messageClass author message time =
@@ -114,5 +125,37 @@ shorten n t =
   if Text.length t > n
     then Text.take m t <> "..." <> Text.takeEnd m t
     else t
- where
-  m = n `div` 2
+  where
+    m = n `div` 2
+
+handleChatSelect :: Attribute
+handleChatSelect = hyper_ "on click set global chat to @data-value"
+
+checkLogin :: Attribute
+checkLogin =
+  hyper_
+    "on load \
+    \if not localStorage.user \
+    \go to url '/login'"
+
+handleMessageInput :: Attribute
+handleMessageInput =
+  hyper_
+    "on keydown[key=='Enter' and (not event.ctrlKey)] \
+    \halt the event \
+    \log my.value \
+    \set my.value to '' \
+    \js autoResize(document.getElementById('message-input')) \
+    \end \
+    \on keydown[key=='Enter' and event.ctrlKey] \
+    \put (my.value + '\\n') into my.value \
+    \js autoResize(document.getElementById('message-input')) \
+    \end"
+
+handleSendMessageOnClick :: Attribute
+handleSendMessageOnClick =
+  hyper_
+    "on click \
+    \log #message-input.value \
+    \set #message-input.value to '' \
+    \js autoResize(document.getElementById('message-input'))"
