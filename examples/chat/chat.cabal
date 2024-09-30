@@ -72,12 +72,14 @@ executable chat
                   , Components.Icons
                   , Components.ThemeToggleButton
                   , Components.LogoutButton
-                  , Utils.Attributes
+                  , Util.Attributes
+                  , Util.UserNameColor
                   , Config
                   , Env
                   , Monad
                   , Message
                   , Types
+                  , Error
 
     build-depends:  base
                   , text
@@ -99,3 +101,9 @@ executable chat
                   , unliftio
                   , aeson
                   , hbs2-keyman-direct-lib
+                  , saltine
+                  , streaming
+                  , http-types
+                  , transformers
+                  , serialise
+                  , time

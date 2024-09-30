@@ -12,7 +12,7 @@ import Lucid
 import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
-import Utils.Attributes
+import Util.Attributes
 import Web.Scotty.Trans
 
 loginPage :: ActionT AppM ()

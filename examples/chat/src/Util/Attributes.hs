@@ -1,8 +1,8 @@
-module Utils.Attributes (
-  ariaLabel_,
-  ariaLive_,
-  hyper_,
-)
+module Util.Attributes
+  ( ariaLabel_,
+    ariaLive_,
+    hyper_,
+  )
 where
 
 import Data.Text (Text)

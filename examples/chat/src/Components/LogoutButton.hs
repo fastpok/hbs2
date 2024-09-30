@@ -3,7 +3,7 @@ module Components.LogoutButton (logoutButton) where
 import Components.Icons
 import Lucid
 import Text.InterpolatedString.Perl6 (qc)
-import Utils.Attributes
+import Util.Attributes
 
 logoutButton :: Html ()
 logoutButton = button_

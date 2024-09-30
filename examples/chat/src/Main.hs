@@ -1,6 +1,7 @@
 import Config
 import Control.Monad.Reader
 import Env
+import Error
 import Message
 import Monad
 import Network.Wai.Middleware.Static
@@ -19,6 +20,8 @@ main = scottyT 3000 runIO application
 application :: ScottyT AppM ()
 application = do
   middleware $ staticPolicy (noDots >-> addBase "static")
+  defaultHandler exceptionHandler
   get "/" mainPage
   get "/login" loginPage
-  post "/message" $ postMessage
+  post "/:chat/message" $ postMessage
+  get "/:chat/messages" $ getMessages

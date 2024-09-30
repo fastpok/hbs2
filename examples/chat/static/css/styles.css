@@ -141,8 +141,29 @@
   grid-area: content;
   display: flex;
   flex-direction: column;
-  /* this thing is somehow fixes layout, but probably there is a more elegant solution */
   overflow-y: hidden;
+}
+
+#chat-placeholder {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#chat-placeholder.hidden {
+  display: none;
+}
+
+#chat {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+#chat.hidden {
+  display: none;
 }
 
 .messages {
@@ -155,7 +176,7 @@
   overflow-x: hidden;
 }
 
-.messages> :first-child {
+.message:first-child {
   margin-top: auto;
 }
 

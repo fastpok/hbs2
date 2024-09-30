@@ -11,11 +11,9 @@ htmlHead = head_ $ do
   script_ [src_ "js/theme-toggle.js"] ("" :: String)
   script_ [src_ "js/htmx.min.js", defer_ ""] ("" :: String)
   script_ [src_ "js/hyperscript.min.js", defer_ ""] ("" :: String)
-  script_ [src_ "js/simplebar.min.js", defer_ ""] ("" :: String)
   script_ [src_ "js/scripts.js", defer_ ""] ("" :: String)
   link_ [rel_ "stylesheet", href_ "css/pico.min.css"]
   link_ [rel_ "stylesheet", href_ "css/pico.colors.min.css"]
-  link_ [rel_ "stylesheet", href_ "css/simplebar.min.css"]
   link_ [rel_ "stylesheet", href_ "css/styles.css"]
   link_ [rel_ "stylesheet", href_ "css/username-colors.css"]
   link_ [rel_ "icon", type_ "image/x-icon", href_ "img/favicon.ico"]
