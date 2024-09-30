@@ -10,6 +10,7 @@ htmlHead = head_ $ do
   -- This script should be run as early as possible to avoid color flashing occurring on page load.
   script_ [src_ "js/theme-toggle.js"] ("" :: String)
   script_ [src_ "js/htmx.min.js", defer_ ""] ("" :: String)
+  script_ [src_ "js/hyperscript.min.js", defer_ ""] ("" :: String)
   script_ [src_ "js/simplebar.min.js", defer_ ""] ("" :: String)
   script_ [src_ "js/autoresize.js", defer_ ""] ("" :: String)
   link_ [rel_ "stylesheet", href_ "css/pico.min.css"]

@@ -1,9 +1,33 @@
-body {
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.h-screen {
   height: 100vh;
 }
 
-.mb-0 {
-  margin-bottom: 0;
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.h-full {
+  height: 100%;
+}
+
+.flex {
+  display: flex;
+}
+
+.grow {
+  flex-grow: 1;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.whitespace-nowrap {
+  white-space: nowrap;
 }
 
 .header-color {
@@ -54,14 +78,22 @@ body {
   gap: var(--pico-spacing);
 }
 
-#theme-toggle {
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.header-button {
   border: none;
   padding: calc(var(--pico-spacing) * 0.5);
   box-shadow: none;
   color: var(--pico-h1-color);
+  display: flex;
+  align-items: center;
 }
 
-#theme-toggle:is(:hover, :active, :focus) {
+.header-button:is(:hover, :active, :focus) {
   color: var(--pico-contrast-hover);
 }
 
@@ -161,4 +193,11 @@ body {
 
 .members p {
   margin-bottom: calc(var(--pico-spacing) * 0.5);
+}
+
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pico-spacing);
 }

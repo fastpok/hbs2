@@ -70,6 +70,8 @@ executable chat
                   , Pages.Login
                   , Components.Head
                   , Components.Icons
+                  , Components.ThemeToggleButton
+                  , Components.LogoutButton
                   , Utils.Attributes
                   , Config
                   , Env
@@ -80,7 +82,6 @@ executable chat
                   , scotty
                   , lucid
                   , wai-middleware-static
-                  , neat-interpolation
                   , hashable
                   , mtl
                   , unliftio-core

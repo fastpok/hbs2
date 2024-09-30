@@ -1,6 +1,8 @@
 module Config (
     Config (..),
     getConfig,
+    MySigil,
+    MyRefChan,
 ) where
 
 import Control.Monad

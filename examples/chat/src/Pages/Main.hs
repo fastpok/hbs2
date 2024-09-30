@@ -2,10 +2,10 @@ module Pages.Main (mainPage) where
 
 import Components.Head
 import Components.Icons
-import Control.Monad.Reader
+import Components.LogoutButton
+import Components.ThemeToggleButton
 import Data.Hashable (hash)
 import Data.Text (Text)
-import Env
 import Lucid
 import Monad
 import Utils.Attributes
@@ -20,7 +20,7 @@ mainPage = do
       htmlBody
 
 htmlBody :: Html ()
-htmlBody = body_ $ do
+htmlBody = body_ [class_ "h-screen"] $ do
   div_ [class_ "wrapper"] $ do
     div_ [class_ "sidebar-header wrapper-item header-color"] "Page name"
     div_ [class_ "sidebar wrapper-item "] $ do
@@ -30,17 +30,9 @@ htmlBody = body_ $ do
       p_ $ small_ "Орки и прочие дикие"
     div_ [class_ "content-header wrapper-item header-color"] $ do
       div_ "Chat name"
-      div_
-        $ button_
-          [ class_ "outline theme-toggle"
-          , id_ "theme-toggle"
-          , title_ "Toggles light & dark"
-          , ariaLabel_ "auto"
-          , ariaLive_ "polite"
-          ]
-        $ do
-          makeIcon Sun
-          makeIcon Moon
+      div_ [class_ "header-buttons"] $ do
+        themeToggleButton
+        logoutButton
 
     div_ [class_ "content wrapper-item"] $ do
       div_ [class_ "messages", data_ "simplebar" ""] $ do
