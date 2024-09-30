@@ -2,17 +2,22 @@ module Pages.Main (mainPage) where
 
 import Components.Head
 import Components.Icons
+import Control.Monad.Reader
 import Data.Hashable (hash)
 import Data.Text (Text)
+import Env
 import Lucid
+import Monad
 import Utils.Attributes
+import Web.Scotty.Trans
 
-mainPage :: Html ()
+mainPage :: ActionT AppM ()
 mainPage = do
-  doctype_
-  html_ [lang_ "en"] $ do
-    htmlHead
-    htmlBody
+  html $ renderText $ do
+    doctype_
+    html_ [lang_ "en"] $ do
+      htmlHead
+      htmlBody
 
 htmlBody :: Html ()
 htmlBody = body_ $ do
