@@ -20,8 +20,8 @@ import Web.Scotty.Trans
 
 mainPage :: ActionT AppM ()
 mainPage = do
-  c <- lift $ asks config
-  let refChans' = refChans c
+  config' <- lift $ asks config
+  let refChans' = refChans config'
   html $ renderText $ do
     doctype_
     html_ [lang_ "en"] $ do
@@ -64,7 +64,7 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
                 ]
                 ""
               button_
-                [class_ "outline send-message", handleSendMessageOnClick]
+                [class_ "outline send-message", handleSendMessageClick]
                 $ makeIcon PaperAirplane
     div_ [class_ "members-header wrapper-item header-color"] "Members"
     div_ [class_ "members wrapper-item"] $ do
@@ -95,9 +95,11 @@ on click
   add .hidden to #chat-placeholder
   remove .hidden from #chat
   set #chat-name.innerText to my.innerText
+  send subscribe(chat: chat) to WebSocket
 |]
 
 -- TODO: it will be great to get rid of timeout after websocket initialization
+-- TODO: scroll down automatically only when we already at bottom
 initScript :: Html ()
 initScript =
   script_ [type_ "text/hyperscript"] $
@@ -135,7 +137,6 @@ sendMessageTemplate :: Text -> String
 sendMessageTemplate message =
   [qc|
 send message(
-  author: localStorage.user,
   body: {message},
   chat: chat
 ) to WebSocket
@@ -166,8 +167,8 @@ on keydown[(key is 'Enter') and ctrlKey]
   {autoresizeMessageInput}
 |]
 
-handleSendMessageOnClick :: Attribute
-handleSendMessageOnClick =
+handleSendMessageClick :: Attribute
+handleSendMessageClick =
   hyper_
     [qc|
 on click

@@ -28,8 +28,8 @@ import UnliftIO
 
 refChanWorker :: (MonadUnliftIO m, MonadReader Env m) => m ()
 refChanWorker = do
-  config <- asks config
-  let refChans' = refChans config
+  config' <- asks config
+  let refChans' = refChans config'
   fix \next -> do
     forM_ refChans' loadChatMessages
     pause @Seconds 2

@@ -17,7 +17,6 @@ import Data.Functor
 import Data.Set (Set)
 import Data.Set qualified as Set
 import HBS2.Net.Auth.Credentials
-import HBS2.Net.Auth.Credentials.Sigil
 import HBS2.OrDie
 import HBS2.Prelude
 import System.Directory
@@ -61,9 +60,9 @@ instance HasCfgKey DBPath (Maybe FilePath) where
 readConfig :: (MonadUnliftIO m) => FilePath -> m [Syntax C]
 readConfig fn = liftIO (readFile fn) <&> fromRight mempty . parseTop
 
-parseSigilFile :: (MonadUnliftIO m) => FilePath -> m (Sigil 'HBS2Basic)
+parseSigilFile :: (MonadUnliftIO m) => FilePath -> m MySigil
 parseSigilFile sigilFile =
-  (liftIO (BS.readFile sigilFile) <&> parseSerialisableFromBase58 @(Sigil 'HBS2Basic))
+  (liftIO (BS.readFile sigilFile) <&> parseSerialisableFromBase58)
     `orDie` "couldn't parse sigil"
 
 parseRefChan :: (MonadUnliftIO m) => String -> m MyRefChan

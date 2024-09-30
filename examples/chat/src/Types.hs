@@ -1,19 +1,18 @@
 module Types where
 
 import Codec.Serialise
-import Control.Monad
 import DBPipe.SQLite
 import Data.Aeson hiding (encode, json)
-import Data.Aeson qualified as Aeson
 import Data.Aeson.Decoding qualified as AD
 import Data.Aeson.Types (Parser)
-import Data.ByteString.Char8 qualified as BS8
 import Data.List qualified as L
 import Data.Maybe
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.Encoding qualified as TLE
 import Data.Time
 import Data.UUID (UUID)
+import Error
 import HBS2.Base58
 import HBS2.Hash
 import HBS2.Net.Auth.Credentials
@@ -24,15 +23,25 @@ import Network.WebSockets (WebSocketsData)
 import Network.WebSockets qualified as WS
 import Util.UserNameColor
 
-type MySigil = Sigil 'HBS2Basic
+newtype MySigil = MySigil {fromMySigil :: Sigil 'HBS2Basic}
+  deriving (Generic)
+  deriving newtype (Serialise)
+
+instance FromJSON MySigil where
+  parseJSON = withText "MySigil" $ \t -> do
+    case parseSerialisableFromBase58 $ TE.encodeUtf8 t of
+      Nothing -> fail "couldn't parse sigil"
+      Just sigil -> pure sigil
 
 newtype MyPublicKey = MyPublicKey {fromMyPublicKey :: PubKey 'Sign 'HBS2Basic}
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Generic)
+  deriving newtype (Serialise, FromStringMaybe)
 
-instance Serialise MyPublicKey
-
-instance FromStringMaybe MyPublicKey where
-  fromStringMay s = MyPublicKey <$> fromStringMay s
+instance FromJSON MyPublicKey where
+  parseJSON = withText "MyPublicKey" $ \t -> do
+    case fromStringMay $ T.unpack t of
+      Nothing -> fail "couldn't parse public key"
+      Just publicKey -> pure publicKey
 
 instance IsString MyPublicKey where
   fromString s = fromMaybe (error "bad public key base58") (fromStringMay s)
@@ -48,58 +57,6 @@ instance ToField MyPublicKey where
 
 type MyRefChan = MyPublicKey
 
-data Message = Message
-  { messageAuthor :: MyPublicKey,
-    messageChat :: MyRefChan,
-    messageBody :: Text,
-    messageCreatedAt :: UTCTime
-  }
-  deriving (Generic)
-
-instance Serialise Message
-
-instance ToHtml Message where
-  toHtml Message {..} =
-    let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
-        createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
-     in createMessage author messageBody createdAt
-
-  -- TODO: fix this
-  toHtmlRaw = toHtml
-
-instance FromRow Message where
-  fromRow = do
-    _hash :: MyHash <- field
-    messageAuthor <- field
-    messageChat <- field
-    messageBody <- field
-    messageCreatedAt <- field
-    pure Message {..}
-
-instance ToJSON Message where
-  toJSON Message {..} =
-    object
-      [ "author" .= show (pretty $ AsBase58 messageAuthor),
-        "chat" .= show (pretty $ AsBase58 messageChat),
-        "body" .= messageBody,
-        "created_at" .= messageCreatedAt
-      ]
-
-instance FromJSON Message where
-  parseJSON = withObject "Message" $ \v -> do
-    messageAuthor <- v .: "author" <&> fromString
-    messageChat <- v .: "chat" <&> fromString
-    messageBody <- v .: "body"
-    messageCreatedAt <- v .: "created_at"
-    pure $ Message {..}
-
-instance WebSocketsData Message where
-  fromDataMessage (WS.Text _ (Just tl)) = orError $ AD.decode $ TLE.encodeUtf8 tl
-  fromDataMessage (WS.Text bl Nothing) = orError $ AD.decode bl
-  fromDataMessage (WS.Binary bl) = orError $ AD.decode bl
-  fromLazyByteString = orError . AD.decode
-  toLazyByteString = TLE.encodeUtf8 . renderText . toHtml
-
 newtype MyHash = MyHash {fromMyHash :: Hash HbSync}
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, Pretty)
@@ -110,74 +67,106 @@ instance ToField MyHash where
 instance FromField MyHash where
   fromField = fmap (MyHash . fromString @(Hash HbSync)) . fromField @String
 
+data Message = Message
+  { messageAuthor :: MyPublicKey,
+    messageChat :: MyRefChan,
+    messageBody :: Text,
+    messageCreatedAt :: UTCTime
+  }
+  deriving (Generic)
+
+instance Serialise Message
+
 instance ToRow Message where
-  toRow msg@Message {..} = toRow (MyHash $ hashObject $ serialise msg, messageChat, messageAuthor, messageBody, messageCreatedAt)
+  toRow msg@Message {..} = toRow (MyHash $ hashObject $ serialise msg, messageAuthor, messageChat, messageBody, messageCreatedAt)
 
-newtype Messages = Messages
-  { fromMessages :: [Message]
-  }
+instance FromRow Message where
+  fromRow = do
+    _hash :: MyHash <- field
+    messageAuthor <- field
+    messageChat <- field
+    messageBody <- field
+    messageCreatedAt <- field
+    pure Message {..}
 
-instance ToJSON Messages where
-  toJSON (Messages msgs) = toJSON msgs
-
-instance FromJSON Messages where
-  parseJSON v = Messages <$> parseJSON v
-
-instance WS.WebSocketsData Messages where
-  fromDataMessage (WS.Text _ (Just tl)) = orError $ AD.decode $ TLE.encodeUtf8 tl
-  fromDataMessage (WS.Text bl Nothing) = orError $ AD.decode bl
-  fromDataMessage (WS.Binary bl) = orError $ AD.decode bl
-  fromLazyByteString = orError . AD.decode
-  toLazyByteString messages = TLE.encodeUtf8 $ renderText $ do
-    forM_ (fromMessages messages) toHtml
-
-createMessage :: (Monad m) => Text -> Text -> Text -> HtmlT m ()
-createMessage author message time =
-  div_ [class_ "message"] $ do
+instance ToHtml Message where
+  toHtml Message {..} = div_ [class_ "message"] $ do
     div_ [class_ "message-header"] $ do
+      let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
+          createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
       div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
-      div_ $ small_ $ toHtml time
+      div_ $ small_ $ toHtml createdAt
     div_ [class_ "message-content"] $ do
-      small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines message)
+      small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines messageBody)
+  toHtmlRaw = toHtml
 
-data WSClient = WSClient
-  { wsClientKey :: MyPublicKey,
-    wsClientConn :: WS.Connection,
-    wsClientSubscriptions :: [MyRefChan],
-    wsClientID :: UUID
+type WSSessionID = UUID
+
+data WSSession = WSSession
+  { wsSessionClientSigil :: MySigil,
+    wsSessionConn :: WS.Connection,
+    wsSessionSubscriptions :: [MyRefChan]
   }
 
-data MessageReq = MessageReq
-  { messageReqAuthor :: MySigil,
-    messageReqChat :: MyRefChan,
-    messageReqBody :: Text
+data WSProtocolMessage
+  = WSProtocolHello WSHello
+  | WSProtocolSubscribe WSSubscribe
+  | WSProtocolMessage WSMessage
+  | WSProtocolMessages WSMessages
+
+instance FromJSON WSProtocolMessage where
+  parseJSON = withObject "WSProtocolMessage" $ \v -> do
+    messageType <- v .: "type" :: Parser Text
+    case messageType of
+      "hello" -> WSProtocolHello <$> parseJSON (Object v)
+      "subscribe" -> WSProtocolSubscribe <$> parseJSON (Object v)
+      "message" -> WSProtocolMessage <$> parseJSON (Object v)
+      "messages" -> undefined
+      _ -> fail $ "Unknown message type: " <> show messageType
+
+instance WebSocketsData WSProtocolMessage where
+  fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolMessage decode error" $ AD.decode $ TLE.encodeUtf8 tl
+  fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolMessage decode error" $ AD.decode bl
+  fromDataMessage (WS.Binary bl) = orError "WSProtocolMessage decode error" $ AD.decode bl
+  fromLazyByteString = orError "WSProtocolMessage decode error" . AD.decode
+  toLazyByteString (WSProtocolMessages messages) = TLE.encodeUtf8 $ renderText $ toHtml messages
+  toLazyByteString _ = undefined
+
+data WSHello = WSHello
+  { wsHelloClientSigil :: MySigil
   }
 
-instance FromJSON MessageReq where
-  parseJSON = withObject "MessageReq" $ \v -> do
-    messageReqAuthor <-
-      v .: "author"
-        >>= \x -> parseSerialisableFromBase58 (BS8.pack x) `orFailWith` "couldn't parse sigil"
-    messageReqChat <- v .: "chat" <&> fromString
-    messageReqBody <- v .: "body"
-    pure $ MessageReq {..}
+instance FromJSON WSHello where
+  parseJSON = withObject "WSHello" $ \v -> do
+    client <- v .: "client"
+    pure $ WSHello {wsHelloClientSigil = client}
 
-instance ToJSON MessageReq where
-  toJSON MessageReq {..} =
-    object
-      [ "author" .= show (pretty $ AsBase58 messageReqAuthor),
-        "body" .= messageReqBody
-      ]
+data WSSubscribe = WSSubscribe
+  { wsSubscribeRefChan :: MyRefChan
+  }
 
-instance WebSocketsData MessageReq where
-  fromDataMessage (WS.Text _ (Just tl)) = orError $ AD.decode $ TLE.encodeUtf8 tl
-  fromDataMessage (WS.Text bl Nothing) = orError $ AD.decode bl
-  fromDataMessage (WS.Binary bl) = orError $ AD.decode bl
-  fromLazyByteString = orError . AD.decode
-  toLazyByteString = Aeson.encode
+instance FromJSON WSSubscribe where
+  parseJSON = withObject "WSSubscribe" $ \v -> do
+    chat <- v .: "chat"
+    pure $ WSSubscribe {wsSubscribeRefChan = chat}
 
-orFailWith :: Maybe a -> String -> Parser a
-orFailWith maybeValue errorMsg = maybe (fail errorMsg) return maybeValue
+data WSMessage = WSMessage
+  { wsMessageChat :: MyRefChan,
+    wsMessageBody :: Text
+  }
 
-orError :: Maybe a -> a
-orError = fromMaybe (error "couldn't decode MessageReq")
+instance FromJSON WSMessage where
+  parseJSON = withObject "WSMessage" $ \v -> do
+    chat <- v .: "chat"
+    body <- v .: "body"
+    pure $
+      WSMessage
+        { wsMessageChat = chat,
+          wsMessageBody = body
+        }
+
+data WSMessages = WSMessages [Message]
+
+instance ToHtml WSMessages where
+  toHtml (WSMessages messages) = mapM_ toHtml messages
+  toHtmlRaw = toHtml

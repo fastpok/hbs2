@@ -12,13 +12,14 @@ import Lucid
 import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
+import Types
 import Util.Attributes
 import Web.Scotty.Trans
 
 loginPage :: ActionT AppM ()
 loginPage = do
-  c <- lift $ asks config
-  let sigils' = sigils c
+  config' <- lift $ asks config
+  let sigils' = sigils config'
   html $ renderText $ do
     doctype_
     html_ [lang_ "en"] $ do
@@ -41,8 +42,8 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
             div_ [role_ "group"] $ do
               select_ [name_ "sigil", id_ "user-select", ariaLabel_ "Select user", required_ ""] $ do
                 forM_ someSigils $ \sigil ->
-                  let sigilText = T.pack $ show $ pretty $ AsBase58 $ sigilSignPk sigil
-                      sigilBase58 = T.pack $ show $ pretty $ AsBase58 sigil
+                  let sigilText = T.pack $ show $ pretty $ AsBase58 $ sigilSignPk $ fromMySigil sigil
+                      sigilBase58 = T.pack $ show $ pretty $ AsBase58 $ fromMySigil sigil
                    in option_ [value_ sigilBase58] $ toHtml sigilText
               button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
 

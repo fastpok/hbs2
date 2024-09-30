@@ -5,13 +5,11 @@ import Control.Monad.Cont
 import Control.Monad.Reader
 import DB
 import Data.ByteString.Lazy qualified as BSL
-import Data.Maybe
-import Data.Text qualified as T
+import Data.Map.Strict qualified as Map
 import Data.Time
 import Data.UUID.V4 qualified as UUID
 import Env
 import Error
-import HBS2.Base58
 import HBS2.Clock
 import HBS2.Data.Types.SignedBox
 import HBS2.KeyMan.Keys.Direct
@@ -20,7 +18,7 @@ import HBS2.Net.Auth.Credentials.Sigil
 import HBS2.OrDie
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
-import HBS2.Prelude
+import HBS2.Prelude (headMay)
 import Monad
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp qualified as Warp
@@ -65,49 +63,63 @@ wsApp env pending = do
     conn
     \connection -> runReaderT (runAppM (myWSApp connection)) env
 
-messageReqToMessage :: (MonadUnliftIO m) => MessageReq -> m Message
-messageReqToMessage messageReq = do
+wsMessageToMessage :: (MonadUnliftIO m) => MyPublicKey -> WSMessage -> m Message
+wsMessageToMessage author wsMessage = do
   currentTime <- liftIO getCurrentTime
   pure $
     Message
-      { messageAuthor = MyPublicKey $ sigilSignPk $ messageReqAuthor messageReq,
-        messageChat = messageReqChat messageReq,
-        messageBody = messageReqBody messageReq,
+      { messageAuthor = author,
+        messageChat = wsMessageChat wsMessage,
+        messageBody = wsMessageBody wsMessage,
         messageCreatedAt = currentTime
       }
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
-  wsClientKeyString <- liftIO $ WS.receiveData conn
-  wsClientID' <- liftIO UUID.nextRandom
-  let wsClient =
-        WSClient
-          { wsClientConn = conn,
-            wsClientSubscriptions = [],
-            -- TODO: handle error
-            wsClientKey = fromMaybe (error "couldn't parse public key") $ fromStringMay $ T.unpack wsClientKeyString,
-            wsClientID = wsClientID'
-          }
-      disconnect = removeWSClient wsClient
-  addWSClient wsClient
-  flip finally disconnect $ do
-    receiveLoop' <- async (receiveLoop conn)
-    sendLoop' <- async (sendLoop conn)
-    void $ waitAnyCatchCancel [receiveLoop', sendLoop']
+  wsData <- liftIO $ WS.receiveData conn
+  case wsData of
+    WSProtocolHello wsHello -> do
+      let wsSession =
+            WSSession
+              { wsSessionConn = conn,
+                wsSessionSubscriptions = [],
+                wsSessionClientSigil = wsHelloClientSigil wsHello
+              }
+      wsSessionID <- addWSSession wsSession
+      let disconnect = removeWSSession wsSessionID
+      flip finally disconnect $ do
+        receiveLoop' <- async (receiveLoop conn wsSessionID)
+        sendLoop' <- async (sendLoop conn wsSessionID)
+        void $ waitAnyCancel [receiveLoop', sendLoop']
+    _ -> do
+      liftIO $ WS.sendTextData conn WSErrorBadHello
+      myWSApp conn
 
-receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> m ()
-receiveLoop conn = do
+receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
+receiveLoop conn sessionID = do
   forever $ do
-    messageReq <- liftIO $ WS.receiveData conn
-    message <- messageReqToMessage messageReq
-    withDB $ insertMessage message
-    postMessageToRefChan message
+    wsData <- liftIO $ WS.receiveData conn
+    case wsData of
+      WSProtocolSubscribe wsSubscribe -> do
+        addSubscription sessionID (wsSubscribeRefChan wsSubscribe)
+      WSProtocolMessage wsMessage -> do
+        session <- getSessionByID sessionID
+        let clientSigil = wsSessionClientSigil session
+            mySigilToMyPublicKey = MyPublicKey . sigilSignPk . fromMySigil
+        message <- wsMessageToMessage (mySigilToMyPublicKey clientSigil) wsMessage
+        withDB $ insertMessage message
+        postMessageToRefChan message
+      _ -> liftIO $ WS.sendTextData conn WSErrorBadMessage
 
-sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> m ()
-sendLoop conn = forever $ do
-  pause @'Seconds 2
-  messages <- withDB selectMessages
-  liftIO $ WS.sendTextData conn $ Messages messages
+sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
+sendLoop conn sessionID = forever $ do
+  session <- getSessionByID sessionID
+  case headMay $ wsSessionSubscriptions session of
+    Nothing -> pause @'Seconds 2
+    Just chat -> do
+      messages <- withDB $ selectChatMessages chat
+      liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
+      pause @'Seconds 2
 
 postMessageToRefChan :: (MonadReader Env m, MonadUnliftIO m) => Message -> m ()
 postMessageToRefChan message = do
@@ -118,18 +130,38 @@ postMessageToRefChan message = do
   refChanAPI <- asks refChanAPI
   void $ callService @RpcRefChanPropose refChanAPI (fromMyPublicKey $ messageChat message, box)
 
-addWSClient :: (MonadReader Env m, MonadUnliftIO m) => WSClient -> m ()
-addWSClient wsClient = do
-  wsClientsTVar <- asks wsClients
-  atomically $ modifyTVar wsClientsTVar (wsClient :)
+addWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSession -> m WSSessionID
+addWSSession wsSession = do
+  wsSessionsTVar <- asks wsSessions
+  wsSessionID <- liftIO UUID.nextRandom
+  atomically $ modifyTVar wsSessionsTVar (Map.insert wsSessionID wsSession)
+  pure wsSessionID
 
-wsClientExists :: (MonadReader Env m, MonadUnliftIO m) => WSClient -> m Bool
-wsClientExists wsClient = do
-  wsClientsTVar <- asks wsClients
-  wsClients' <- readTVarIO wsClientsTVar
-  pure $ any (\c -> wsClientID c == wsClientID wsClient) wsClients'
+-- wsSessionExists :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m Bool
+-- wsSessionExists wsSessionID = do
+--   wsSessionsTVar <- asks wsSessions
+--   wsSessions' <- readTVarIO wsSessionsTVar
+--   pure $ Map.member wsSessionID wsSessions'
 
-removeWSClient :: (MonadReader Env m, MonadUnliftIO m) => WSClient -> m ()
-removeWSClient wsClient = do
-  wsClientsTVar <- asks wsClients
-  atomically $ modifyTVar wsClientsTVar (filter (\c -> wsClientID c /= wsClientID wsClient))
+removeWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m ()
+removeWSSession wsSessionID = do
+  wsSessionsTVar <- asks wsSessions
+  atomically $ modifyTVar wsSessionsTVar (Map.delete wsSessionID)
+
+addSubscription :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyRefChan -> m ()
+addSubscription wsSessionID refChan = do
+  wsSessionsTVar <- asks wsSessions
+  atomically $ modifyTVar wsSessionsTVar (Map.adjust addSub wsSessionID)
+  where
+    addSub session =
+      session
+        { wsSessionSubscriptions = [refChan]
+        -- for now we only have 1 active sub
+        -- { wsSessionSubscriptions = refChan : wsSessionSubscriptions session
+        }
+
+getSessionByID :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m WSSession
+getSessionByID wsSessionID = do
+  wsSessionsTVar <- asks wsSessions
+  wsSessions' <- readTVarIO wsSessionsTVar
+  pure $ wsSessions' Map.! wsSessionID

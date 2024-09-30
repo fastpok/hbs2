@@ -1,15 +1,15 @@
-module Error
-  ( Error (..),
-    exceptionHandler,
-  )
-where
+module Error where
 
 import Control.Exception (Exception (..))
 import Control.Monad.IO.Class
-import Data.Aeson hiding (json)
+import Data.Aeson
+import Data.Aeson qualified as Aeson
+import Data.Maybe
 import Data.Text (Text)
 import Network.HTTP.Types
+import Network.WebSockets
 import Web.Scotty.Trans
+import Web.Scotty.Trans qualified as Scotty
 
 data Error = ServerError Text | RequestError Text
   deriving (Show, Eq)
@@ -27,7 +27,26 @@ exceptionHandler :: (MonadIO m) => ErrorHandler m
 exceptionHandler = Handler $ \case
   e@(ServerError _) -> do
     status status500
-    json e
+    Scotty.json e
   e@(RequestError _) -> do
     status status400
-    json e
+    Scotty.json e
+
+data WSError
+  = WSErrorBadHello
+  | WSErrorBadMessage
+
+wsErrorText :: WSError -> Text
+wsErrorText WSErrorBadHello = "couldn't parse hello message"
+wsErrorText WSErrorBadMessage = "couldn't parse message"
+
+instance ToJSON WSError where
+  toJSON e = object ["error" .= wsErrorText e]
+
+instance WebSocketsData WSError where
+  fromDataMessage = undefined
+  fromLazyByteString = undefined
+  toLazyByteString = Aeson.encode
+
+orError :: String -> Maybe a -> a
+orError s = fromMaybe (error s)

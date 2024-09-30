@@ -11,4 +11,4 @@ main = do
   config <- getConfig
   env <- initEnv config
   workers <- runReaderT runWorkers env
-  void $ waitAnyCatchCancel workers
+  void $ waitAnyCancel workers

@@ -7,6 +7,8 @@ where
 import Config
 import Control.Monad.IO.Unlift
 import DBPipe.SQLite
+import Data.Map (Map)
+import Data.Map.Strict qualified as Map
 import Data.String (IsString (..))
 import HBS2.OrDie
 import HBS2.Peer.CLI.Detect
@@ -24,7 +26,7 @@ data Env = Env
     storageAPI :: ServiceCaller StorageAPI UNIX,
     rpcSockPath :: FilePath,
     dbEnv :: DBPipeEnv,
-    wsClients :: TVar [WSClient]
+    wsSessions :: TVar (Map WSSessionID WSSession)
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -34,7 +36,7 @@ initEnv config = do
   refChanAPI <- makeServiceCaller @RefChanAPI peer
   storageAPI <- makeServiceCaller @StorageAPI peer
   dbEnv <- initDBEnv $ dbPath config
-  wsClients <- newTVarIO []
+  wsSessions <- newTVarIO Map.empty
   pure $ Env {..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv

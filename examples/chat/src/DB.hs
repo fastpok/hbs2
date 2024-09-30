@@ -23,7 +23,7 @@ createMessagesTable =
     [qc|
       create table if not exists messages (
         hash text primary key,
-        user_id text not null,
+        author_id text not null,
         chat_id text not null,
         content text not null,
         created_at text not null
@@ -34,15 +34,17 @@ insertMessage :: (MonadUnliftIO m) => Message -> DBPipeM m ()
 insertMessage message = do
   insert @String
     [qc|
-      insert into messages (hash, user_id, chat_id, content, created_at)
+      insert into messages (hash, author_id, chat_id, content, created_at)
       values (?, ?, ?, ?, ?)
       on conflict (hash) do nothing
     |]
     message
 
-selectMessages :: (MonadUnliftIO m) => DBPipeM m [Message]
-selectMessages = do
-  select_ @String
+selectChatMessages :: (MonadUnliftIO m) => MyRefChan -> DBPipeM m [Message]
+selectChatMessages refChan = do
+  select @_ @_ @String
     [qc|
       select * from messages
+      where chat_id = ?
     |]
+    (Only refChan)
