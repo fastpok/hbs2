@@ -93,3 +93,4 @@ executable chat
                   , hbs2-peer
                   , hbs2-core
                   , bytestring
+                  , prettyprinter

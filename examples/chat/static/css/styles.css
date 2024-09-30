@@ -70,6 +70,25 @@
   text-overflow: ellipsis;
 }
 
+.chat-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.chat-button {
+  border: none;
+  padding: calc(var(--pico-spacing) * 0.5);
+  box-shadow: none;
+  color: var(--pico-color);
+  text-align: left;
+}
+
+.chat-button:is(:hover, :active, :focus) {
+  color: var(--pico-contrast-hover);
+  background-color: var(--pico-secondary-hover-background);
+}
+
 .content-header {
   padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
   display: flex;

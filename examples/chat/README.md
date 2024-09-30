@@ -46,3 +46,9 @@ hbs2 keyring-new -n 1 > /path-to-keyring.key
 ```shell
 hbs2-cli hbs2:sigil:create-from-keyring 1 [str:read-file /path-to-keyring.key] > sigil.txt
 ```
+
+or
+
+```shell
+hbs2 sigil create -k /path-to-keyring.key <encryption-key-from-keyring> > sigil.txt
+```

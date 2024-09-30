@@ -4,30 +4,39 @@ import Components.Head
 import Components.Icons
 import Components.LogoutButton
 import Components.ThemeToggleButton
+import Config
+import Control.Monad.Reader
 import Data.Hashable (hash)
 import Data.Text (Text)
+import Data.Text qualified as Text
+import Env
+import HBS2.Base58
 import Lucid
 import Monad
+import Prettyprinter
 import Utils.Attributes
 import Web.Scotty.Trans
 
 mainPage :: ActionT AppM ()
 mainPage = do
+  c <- lift $ asks config
+  let refChans' = refChans c
   html $ renderText $ do
     doctype_
     html_ [lang_ "en"] $ do
       htmlHead
-      htmlBody
+      htmlBody refChans'
 
-htmlBody :: Html ()
-htmlBody = body_ [class_ "h-screen"] $ do
+htmlBody :: [MyRefChan] -> Html ()
+htmlBody refChans' = body_ [class_ "h-screen"] $ do
   div_ [class_ "wrapper"] $ do
-    div_ [class_ "sidebar-header wrapper-item header-color"] "Page name"
-    div_ [class_ "sidebar wrapper-item "] $ do
-      p_ [class_ "header-color"] "Chats"
-      p_ $ small_ "Братаны из Братства"
-      p_ $ small_ "Шпионский расчёт в Шире"
-      p_ $ small_ "Орки и прочие дикие"
+    div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
+    div_ [class_ "sidebar wrapper-item chat-buttons"] $ do
+      case refChans' of
+        [] -> p_ $ small_ "There are no chats available"
+        refChans'' -> forM_ refChans'' $ \refChan ->
+          let refChanText = shorten 8 $ Text.pack $ show $ pretty $ AsBase58 refChan
+           in button_ [class_ "outline chat-button"] $ toHtml refChanText
     div_ [class_ "content-header wrapper-item header-color"] $ do
       div_ "Chat name"
       div_ [class_ "header-buttons"] $ do
@@ -99,3 +108,11 @@ createMessage messageClass author message time =
       div_ $ small_ time
     div_ [class_ "message-content"] $ do
       small_ message
+
+shorten :: Int -> Text -> Text
+shorten n t =
+  if Text.length t > n
+    then Text.take m t <> "..." <> Text.takeEnd m t
+    else t
+ where
+  m = n `div` 2

@@ -6,9 +6,9 @@ import Config
 import Control.Monad.Reader
 import Data.Text qualified as Text
 import Env
-import HBS2.Prelude (Pretty (..))
 import Lucid
 import Monad
+import Prettyprinter
 import Utils.Attributes
 import Web.Scotty.Trans
 
@@ -23,7 +23,7 @@ loginPage = do
             htmlBody sigils'
 
 htmlBody :: [MySigil] -> Html ()
-htmlBody sigils = body_ [class_ "min-h-screen flex"] $
+htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
     div_ [class_ "container grow flex flex-col"] $ do
         div_ [class_ "content-header header-color"] $ do
             div_ "hbs2 chat"
@@ -34,7 +34,7 @@ htmlBody sigils = body_ [class_ "min-h-screen flex"] $
                 h2_ "Select user"
                 div_ [role_ "group"] $ do
                     select_ [name_ "sigil", id_ "user-select", ariaLabel_ "Select user", required_ ""] $ do
-                        forM_ sigils $ \sigil ->
+                        forM_ sigils' $ \sigil ->
                             let sigilText = Text.pack $ show $ pretty sigil
                              in option_ [value_ sigilText] $ toHtml sigilText
                     button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
