@@ -94,6 +94,8 @@ receiveLoop conn sessionID = do
     case wsData of
       WSProtocolSubscribe wsSubscribe -> do
         addSubscription sessionID (wsSubscribeRefChan wsSubscribe)
+        messages <- withDB $ selectChatMessages $ wsSubscribeRefChan wsSubscribe
+        liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
       WSProtocolMessage wsMessage -> do
         message <- wsMessageToMessage wsMessage
         withDB $ insertMessage message
