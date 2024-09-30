@@ -116,3 +116,4 @@ executable chat
                   , warp
                   , wai
                   , wai-websockets
+                  , uuid

@@ -13,6 +13,7 @@ import Data.Maybe
 import Data.Text qualified as T
 import Data.Text.Lazy.Encoding qualified as TLE
 import Data.Time
+import Data.UUID (UUID)
 import HBS2.Base58
 import HBS2.Hash
 import HBS2.Net.Auth.Credentials
@@ -140,8 +141,10 @@ createMessage author message time =
       small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines message)
 
 data WSClient = WSClient
-  { wsClientUser :: MyPublicKey,
-    wsClientConn :: WS.Connection
+  { wsClientKey :: MyPublicKey,
+    wsClientConn :: WS.Connection,
+    wsClientSubscriptions :: [MyRefChan],
+    wsClientID :: UUID
   }
 
 data MessageReq = MessageReq
@@ -149,9 +152,6 @@ data MessageReq = MessageReq
     messageReqChat :: MyRefChan,
     messageReqBody :: Text
   }
-
-orFailWith :: Maybe a -> String -> Parser a
-orFailWith maybeValue errorMsg = maybe (fail errorMsg) return maybeValue
 
 instance FromJSON MessageReq where
   parseJSON = withObject "MessageReq" $ \v -> do
@@ -169,12 +169,15 @@ instance ToJSON MessageReq where
         "body" .= messageReqBody
       ]
 
-orError :: Maybe a -> a
-orError = fromMaybe (error "couldn't decode MessageReq")
-
 instance WebSocketsData MessageReq where
   fromDataMessage (WS.Text _ (Just tl)) = orError $ AD.decode $ TLE.encodeUtf8 tl
   fromDataMessage (WS.Text bl Nothing) = orError $ AD.decode bl
   fromDataMessage (WS.Binary bl) = orError $ AD.decode bl
   fromLazyByteString = orError . AD.decode
   toLazyByteString = Aeson.encode
+
+orFailWith :: Maybe a -> String -> Parser a
+orFailWith maybeValue errorMsg = maybe (fail errorMsg) return maybeValue
+
+orError :: Maybe a -> a
+orError = fromMaybe (error "couldn't decode MessageReq")

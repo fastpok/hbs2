@@ -30,7 +30,8 @@ mainPage = do
 
 htmlBody :: [MyRefChan] -> Html ()
 htmlBody refChans' = body_ [class_ "h-screen"] $ do
-  div_ [class_ "wrapper", checkLogin] $ do
+  initScript
+  div_ [class_ "wrapper"] $ do
     div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
     div_ [class_ "sidebar wrapper-item chat-buttons"] $ do
       case refChans' of
@@ -96,18 +97,26 @@ on click
   set #chat-name.innerText to my.innerText
 |]
 
-checkLogin :: Attribute
-checkLogin =
-  hyper_
-    [qc|
-on load
+-- TODO: it will be great to get rid of timeout after websocket initialization
+initScript :: Html ()
+initScript =
+  script_ [type_ "text/hyperscript"] $
+    toHtmlRaw @String
+      [qc|
+def initWebSocket()
+  socket WebSocket /
+    on message
+      put message into #messages.innerHTML
+      {scrollDown}
+end
+
+init
   if not localStorage.user
     go to url '/login'
   end
-  socket WebSocket /
-    on message
-    put message into #messages.innerHTML
-    {scrollDown}
+  initWebSocket()
+  wait 1s
+  send hello(client: localStorage.user) to WebSocket
 |]
 
 autoresizeMessageInput :: String

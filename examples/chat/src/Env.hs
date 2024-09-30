@@ -15,13 +15,16 @@ import HBS2.Peer.RPC.API.Storage
 import HBS2.Peer.RPC.Client.Unix
 import System.Directory
 import System.FilePath
+import Types
+import UnliftIO
 
 data Env = Env
   { config :: Config,
     refChanAPI :: ServiceCaller RefChanAPI UNIX,
     storageAPI :: ServiceCaller StorageAPI UNIX,
     rpcSockPath :: FilePath,
-    dbEnv :: DBPipeEnv
+    dbEnv :: DBPipeEnv,
+    wsClients :: TVar [WSClient]
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -31,6 +34,7 @@ initEnv config = do
   refChanAPI <- makeServiceCaller @RefChanAPI peer
   storageAPI <- makeServiceCaller @StorageAPI peer
   dbEnv <- initDBEnv $ dbPath config
+  wsClients <- newTVarIO []
   pure $ Env {..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv
