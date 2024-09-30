@@ -98,7 +98,6 @@ on click
   send subscribe(chat: chat) to WebSocket
 |]
 
--- TODO: it will be great to get rid of timeout after websocket initialization
 -- TODO: scroll down automatically only when we already at bottom
 initScript :: Html ()
 initScript =
@@ -117,8 +116,6 @@ init
     go to url '/login'
   end
   initWebSocket()
-  wait 1s
-  send hello(client: localStorage.user) to WebSocket
 |]
 
 autoresizeMessageInput :: String
@@ -138,7 +135,8 @@ sendMessageTemplate message =
   [qc|
 send message(
   body: {message},
-  chat: chat
+  chat: chat,
+  author: localStorage.user
 ) to WebSocket
 |]
 

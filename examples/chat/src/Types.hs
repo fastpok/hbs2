@@ -103,14 +103,12 @@ instance ToHtml Message where
 type WSSessionID = UUID
 
 data WSSession = WSSession
-  { wsSessionClientSigil :: MySigil,
-    wsSessionConn :: WS.Connection,
+  { wsSessionConn :: WS.Connection,
     wsSessionSubscriptions :: [MyRefChan]
   }
 
 data WSProtocolMessage
-  = WSProtocolHello WSHello
-  | WSProtocolSubscribe WSSubscribe
+  = WSProtocolSubscribe WSSubscribe
   | WSProtocolMessage WSMessage
   | WSProtocolMessages WSMessages
 
@@ -118,7 +116,6 @@ instance FromJSON WSProtocolMessage where
   parseJSON = withObject "WSProtocolMessage" $ \v -> do
     messageType <- v .: "type" :: Parser Text
     case messageType of
-      "hello" -> WSProtocolHello <$> parseJSON (Object v)
       "subscribe" -> WSProtocolSubscribe <$> parseJSON (Object v)
       "message" -> WSProtocolMessage <$> parseJSON (Object v)
       "messages" -> undefined
@@ -132,15 +129,6 @@ instance WebSocketsData WSProtocolMessage where
   toLazyByteString (WSProtocolMessages messages) = TLE.encodeUtf8 $ renderText $ toHtml messages
   toLazyByteString _ = undefined
 
-data WSHello = WSHello
-  { wsHelloClientSigil :: MySigil
-  }
-
-instance FromJSON WSHello where
-  parseJSON = withObject "WSHello" $ \v -> do
-    client <- v .: "client"
-    pure $ WSHello {wsHelloClientSigil = client}
-
 data WSSubscribe = WSSubscribe
   { wsSubscribeRefChan :: MyRefChan
   }
@@ -152,16 +140,19 @@ instance FromJSON WSSubscribe where
 
 data WSMessage = WSMessage
   { wsMessageChat :: MyRefChan,
+    wsMessageAuthor :: MySigil,
     wsMessageBody :: Text
   }
 
 instance FromJSON WSMessage where
   parseJSON = withObject "WSMessage" $ \v -> do
     chat <- v .: "chat"
+    author <- v .: "author"
     body <- v .: "body"
     pure $
       WSMessage
         { wsMessageChat = chat,
+          wsMessageAuthor = author,
           wsMessageBody = body
         }
 

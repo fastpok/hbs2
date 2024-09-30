@@ -63,12 +63,12 @@ wsApp env pending = do
     conn
     \connection -> runReaderT (runAppM (myWSApp connection)) env
 
-wsMessageToMessage :: (MonadUnliftIO m) => MyPublicKey -> WSMessage -> m Message
-wsMessageToMessage author wsMessage = do
+wsMessageToMessage :: (MonadUnliftIO m) => WSMessage -> m Message
+wsMessageToMessage wsMessage = do
   currentTime <- liftIO getCurrentTime
   pure $
     Message
-      { messageAuthor = author,
+      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsMessageAuthor wsMessage,
         messageChat = wsMessageChat wsMessage,
         messageBody = wsMessageBody wsMessage,
         messageCreatedAt = currentTime
@@ -76,24 +76,17 @@ wsMessageToMessage author wsMessage = do
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
-  wsData <- liftIO $ WS.receiveData conn
-  case wsData of
-    WSProtocolHello wsHello -> do
-      let wsSession =
-            WSSession
-              { wsSessionConn = conn,
-                wsSessionSubscriptions = [],
-                wsSessionClientSigil = wsHelloClientSigil wsHello
-              }
-      wsSessionID <- addWSSession wsSession
-      let disconnect = removeWSSession wsSessionID
-      flip finally disconnect $ do
-        receiveLoop' <- async (receiveLoop conn wsSessionID)
-        sendLoop' <- async (sendLoop conn wsSessionID)
-        void $ waitAnyCancel [receiveLoop', sendLoop']
-    _ -> do
-      liftIO $ WS.sendTextData conn WSErrorBadHello
-      myWSApp conn
+  let wsSession =
+        WSSession
+          { wsSessionConn = conn,
+            wsSessionSubscriptions = []
+          }
+  wsSessionID <- addWSSession wsSession
+  let disconnect = removeWSSession wsSessionID
+  flip finally disconnect $ do
+    receiveLoop' <- async (receiveLoop conn wsSessionID)
+    sendLoop' <- async (sendLoop conn wsSessionID)
+    void $ waitAnyCancel [receiveLoop', sendLoop']
 
 receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 receiveLoop conn sessionID = do
@@ -103,10 +96,7 @@ receiveLoop conn sessionID = do
       WSProtocolSubscribe wsSubscribe -> do
         addSubscription sessionID (wsSubscribeRefChan wsSubscribe)
       WSProtocolMessage wsMessage -> do
-        session <- getSessionByID sessionID
-        let clientSigil = wsSessionClientSigil session
-            mySigilToMyPublicKey = MyPublicKey . sigilSignPk . fromMySigil
-        message <- wsMessageToMessage (mySigilToMyPublicKey clientSigil) wsMessage
+        message <- wsMessageToMessage wsMessage
         withDB $ insertMessage message
         postMessageToRefChan message
       _ -> liftIO $ WS.sendTextData conn WSErrorBadMessage
