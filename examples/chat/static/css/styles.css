@@ -89,6 +89,11 @@
   background-color: var(--pico-contrast-focus);
 }
 
+.chat-button.active {
+  color: var(--pico-contrast-hover);
+  background-color: var(--pico-contrast-focus);
+}
+
 .content-header {
   padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
   display: flex;
@@ -150,7 +155,7 @@
   overflow-x: hidden;
 }
 
-.messages > :first-child {
+.messages> :first-child {
   margin-top: auto;
 }
 
@@ -183,8 +188,7 @@
   background-color: var(--pico-form-element-background-color);
   border-color: var(--pico-form-element-border-color);
   border-left: none;
-  padding: var(--pico-form-element-spacing-vertical)
-    calc(var(--pico-form-element-spacing-horizontal) * 0.5);
+  padding: var(--pico-form-element-spacing-vertical) calc(var(--pico-form-element-spacing-horizontal) * 0.5);
   display: flex;
   align-items: center;
   color: var(--pico-h1-color);

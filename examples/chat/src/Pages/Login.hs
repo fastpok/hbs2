@@ -6,6 +6,8 @@ import Config
 import Control.Monad.Reader
 import Data.Text qualified as Text
 import Env
+import HBS2.Base58
+import HBS2.Net.Auth.Credentials.Sigil (Sigil (..))
 import Lucid
 import Monad
 import Prettyprinter
@@ -39,8 +41,9 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
             div_ [role_ "group"] $ do
               select_ [name_ "sigil", id_ "user-select", ariaLabel_ "Select user", required_ ""] $ do
                 forM_ someSigils $ \sigil ->
-                  let sigilText = Text.pack $ show $ pretty sigil
-                   in option_ [value_ sigilText] $ toHtml sigilText
+                  let sigilText = Text.pack $ show $ pretty $ AsBase58 $ sigilSignPk sigil
+                      sigilBase58 = Text.pack $ show $ pretty $ AsBase58 sigil
+                   in option_ [value_ sigilBase58] $ toHtml sigilText
               button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
 
 noSigilsMessage :: Html ()

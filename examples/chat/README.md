@@ -16,7 +16,7 @@
 
    ```
    (version 1)
-   (quorum 2)
+   (quorum 1)
    (wait 10)
 
    (peer "<peer-key-1>" 1)

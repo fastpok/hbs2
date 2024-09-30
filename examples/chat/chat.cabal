@@ -76,6 +76,8 @@ executable chat
                   , Config
                   , Env
                   , Monad
+                  , Message
+                  , Types
 
     build-depends:  base
                   , text
@@ -94,3 +96,6 @@ executable chat
                   , hbs2-core
                   , bytestring
                   , prettyprinter
+                  , unliftio
+                  , aeson
+                  , hbs2-keyman-direct-lib

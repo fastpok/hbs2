@@ -129,7 +129,14 @@ shorten n t =
     m = n `div` 2
 
 handleChatSelect :: Attribute
-handleChatSelect = hyper_ "on click set global chat to @data-value"
+handleChatSelect =
+  hyper_
+    [qc|
+on click
+set global chat to @data-value
+remove .active from .chat-button
+add .active to me
+|]
 
 checkLogin :: Attribute
 checkLogin =
@@ -149,15 +156,17 @@ js autoResize(document.getElementById('message-input')) end
 postMessageTemplate :: Text -> String
 postMessageTemplate message =
   [qc|
+set requestBody to
+\{
+  author: localStorage.user,
+  chat: chat,
+  body: {message}
+}
 fetch /message with
 \{
   method:'POST',
   headers: \{'Content-Type': 'application/json'},
-  body: \{
-    message: {message},
-    author: localStorage.user,
-    chat: chat
-  }
+  body: JSON.stringify(requestBody)
 }
 |]
 
