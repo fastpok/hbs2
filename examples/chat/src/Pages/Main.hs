@@ -69,9 +69,11 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
                 $ makeIcon PaperAirplane
     div_ [class_ "members-header wrapper-item header-color"] "Members"
     div_ [class_ "members wrapper-item"] $ do
-      createMember "Гэндальф"
-      createMember "Арагорн"
-      createMember "Фродо"
+      pure ()
+
+-- createMember "Гэндальф"
+-- createMember "Арагорн"
+-- createMember "Фродо"
 
 createMember :: Text -> Html ()
 createMember username = p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml username
