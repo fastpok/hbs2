@@ -1,0 +1,75 @@
+cabal-version:      3.0
+name:               chat
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+-- author:
+-- maintainer:
+-- copyright:
+category:           Chat
+build-type:         Simple
+-- extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common shared-properties
+    ghc-options:
+        -Wall
+        -O2
+        -- -fno-warn-type-defaults
+        -- -fno-warn-unused-matches
+        -- -fno-warn-unused-do-bind
+        -- -Werror=missing-methods
+        -- -Werror=incomplete-patterns
+        -- -fno-warn-unused-binds
+        -threaded
+        -rtsopts
+        "-with-rtsopts=-N4 -A256m -AL256m -I0"
+
+
+  default-language:    Haskell2010
+
+  default-extensions:
+                       ApplicativeDo
+                     , BangPatterns
+                     , BlockArguments
+                     , ConstraintKinds
+                     , DataKinds
+                     , DeriveDataTypeable
+                     , DeriveGeneric
+                     , DerivingStrategies
+                     , DerivingVia
+                     , ExtendedDefaultRules
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , GADTs
+                     , GeneralizedNewtypeDeriving
+                     , ImportQualifiedPost
+                     , LambdaCase
+                     , MultiParamTypeClasses
+                     , OverloadedLabels
+                     , OverloadedStrings
+                     , QuasiQuotes
+                     , RankNTypes
+                     , RecordWildCards
+                     , ScopedTypeVariables
+                     , StandaloneDeriving
+                     , TupleSections
+                     , TypeApplications
+                     , TypeFamilies
+                     , ViewPatterns
+
+executable chat
+    import:             shared-properties
+
+    hs-source-dirs:     src
+    main-is:            Main.hs
+
+    build-depends:      base
+                      , text
+                      , scotty
+                      , lucid
+                      , wai-middleware-static
+                      , neat-interpolation
+                      , hashable

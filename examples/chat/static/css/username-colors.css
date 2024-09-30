@@ -1,0 +1,159 @@
+.username-red {
+    color: var(--pico-color-red-500);
+}
+
+[data-theme=dark] .username-red {
+    color: var(--pico-color-red-200);
+}
+
+.username-pink {
+    color: var(--pico-color-pink-500);
+}
+
+[data-theme=dark] .username-pink {
+    color: var(--pico-color-pink-200);
+}
+
+.username-fuchsia {
+    color: var(--pico-color-fuchsia-500);
+}
+
+[data-theme=dark] .username-fuchsia {
+    color: var(--pico-color-fuchsia-200);
+}
+
+.username-purple {
+    color: var(--pico-color-purple-500);
+}
+
+[data-theme=dark] .username-purple {
+    color: var(--pico-color-purple-200);
+}
+
+.username-violet {
+    color: var(--pico-color-violet-500);
+}
+
+[data-theme=dark] .username-violet {
+    color: var(--pico-color-violet-200);
+}
+
+.username-indigo {
+    color: var(--pico-color-indigo-500);
+}
+
+[data-theme=dark] .username-indigo {
+    color: var(--pico-color-indigo-200);
+}
+
+.username-blue {
+    color: var(--pico-color-blue-500);
+}
+
+[data-theme=dark] .username-blue {
+    color: var(--pico-color-blue-200);
+}
+
+.username-azure {
+    color: var(--pico-color-azure-500);
+}
+
+[data-theme=dark] .username-azure {
+    color: var(--pico-color-azure-200);
+}
+
+.username-cyan {
+    color: var(--pico-color-cyan-500);
+}
+
+[data-theme=dark] .username-cyan {
+    color: var(--pico-color-cyan-200);
+}
+
+.username-jade {
+    color: var(--pico-color-jade-500);
+}
+
+[data-theme=dark] .username-jade {
+    color: var(--pico-color-jade-200);
+}
+
+.username-green {
+    color: var(--pico-color-green-500);
+}
+
+[data-theme=dark] .username-green {
+    color: var(--pico-color-green-200);
+}
+
+.username-lime {
+    color: var(--pico-color-lime-500);
+}
+
+[data-theme=dark] .username-lime {
+    color: var(--pico-color-lime-200);
+}
+
+.username-yellow {
+    color: var(--pico-color-yellow-500);
+}
+
+[data-theme=dark] .username-yellow {
+    color: var(--pico-color-yellow-200);
+}
+
+.username-amber {
+    color: var(--pico-color-amber-500);
+}
+
+[data-theme=dark] .username-amber {
+    color: var(--pico-color-amber-200);
+}
+
+.username-pumpkin {
+    color: var(--pico-color-pumpkin-500);
+}
+
+[data-theme=dark] .username-pumpkin {
+    color: var(--pico-color-pumpkin-200);
+}
+
+.username-orange {
+    color: var(--pico-color-orange-500);
+}
+
+[data-theme=dark] .username-orange {
+    color: var(--pico-color-orange-200);
+}
+
+.username-sand {
+    color: var(--pico-color-sand-500);
+}
+
+[data-theme=dark] .username-sand {
+    color: var(--pico-color-sand-200);
+}
+
+.username-grey {
+    color: var(--pico-color-grey-500);
+}
+
+[data-theme=dark] .username-grey {
+    color: var(--pico-color-grey-200);
+}
+
+.username-zinc {
+    color: var(--pico-color-zinc-500);
+}
+
+[data-theme=dark] .username-zinc {
+    color: var(--pico-color-zinc-200);
+}
+
+.username-slate {
+    color: var(--pico-color-slate-500);
+}
+
+[data-theme=dark] .username-slate {
+    color: var(--pico-color-slate-200);
+}
