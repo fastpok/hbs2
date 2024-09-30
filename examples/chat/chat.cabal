@@ -77,9 +77,12 @@ executable chat
                   , Config
                   , Env
                   , Monad
-                  , Message
                   , Types
                   , Error
+                  , DB
+                  , Workers
+                  , Workers.RefChan
+                  , Workers.Web
 
     build-depends:  base
                   , text
@@ -107,3 +110,9 @@ executable chat
                   , transformers
                   , serialise
                   , time
+                  , db-pipe
+                  , sqlite-simple
+                  , websockets
+                  , warp
+                  , wai
+                  , wai-websockets

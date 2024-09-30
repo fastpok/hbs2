@@ -48,7 +48,7 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
     div_ [class_ "content wrapper-item"] $ do
       div_ [id_ "chat-placeholder"] $ p_ "Select a chat"
       div_ [class_ "hidden", id_ "chat"] $ do
-        div_ [class_ "messages", id_ "messages", handlePolling] ""
+        div_ [class_ "messages", id_ "messages"] ""
         div_ [class_ "message-input-wrapper"] $
           fieldset_ [role_ "group", class_ "mb-0"] $
             do
@@ -87,15 +87,13 @@ handleChatSelect =
   hyper_
     [qc|
 on click
-send stoppolling to #messages
-set #messages.innerText to ''
-set global chat to @data-value
-remove .active from .chat-button
-add .active to me
-add .hidden to #chat-placeholder
-remove .hidden from #chat
-set #chat-name.innerText to my.innerText
-send startpolling to #messages
+  set #messages.innerText to ''
+  set global chat to @data-value
+  remove .active from .chat-button
+  add .active to me
+  add .hidden to #chat-placeholder
+  remove .hidden from #chat
+  set #chat-name.innerText to my.innerText
 |]
 
 checkLogin :: Attribute
@@ -103,20 +101,13 @@ checkLogin =
   hyper_
     [qc|
 on load
-if not localStorage.user
-go to url '/login'
-|]
-
-handlePolling :: Attribute
-handlePolling =
-  hyper_
-    [qc|
-on startpolling 
-repeat until event stoppolling
-  fetch `/$\{chat}/messages`
-  put the result into my.innerHTML
-  wait 2s
-end
+  if not localStorage.user
+    go to url '/login'
+  end
+  socket WebSocket /
+    on message
+    put message into #messages.innerHTML
+    {scrollDown}
 |]
 
 autoresizeMessageInput :: String
@@ -131,20 +122,14 @@ scrollDown =
 js scrollDown(document.getElementById('messages')) end
 |]
 
-postMessageTemplate :: Text -> String
-postMessageTemplate message =
+sendMessageTemplate :: Text -> String
+sendMessageTemplate message =
   [qc|
-set requestBody to
-\{
+send message(
   author: localStorage.user,
-  body: {message}
-}
-fetch `/$\{chat}/message` with
-\{
-  method:'POST',
-  headers: \{'Content-Type': 'application/json'},
-  body: JSON.stringify(requestBody)
-}
+  body: {message},
+  chat: chat
+) to WebSocket
 |]
 
 handleMessageInput :: Attribute
@@ -154,22 +139,22 @@ handleMessageInput =
 on input {autoresizeMessageInput}
 
 on keydown[(key is 'Enter') and (not ctrlKey)]
-halt the event
-if my.value
-  {postMessageTemplate "my.value"}
-  set my.value to ''
-  {autoresizeMessageInput}
-end
+  halt the event
+  if my.value
+    {sendMessageTemplate "my.value"}
+    set my.value to ''
+    {autoresizeMessageInput}
+  end
 
 on keydown[(key is 'Enter') and ctrlKey]
-pick items start to my.selectionStart from my.value
-set left to it
-pick items my.selectionEnd to end from my.value
-set right to it
-put (left + '\\n' + right) into my.value
-put (left.length + 1) into my.selectionStart
-put (left.length + 1) into my.selectionEnd
-{autoresizeMessageInput}
+  pick items start to my.selectionStart from my.value
+  set left to it
+  pick items my.selectionEnd to end from my.value
+  set right to it
+  put (left + '\\n' + right) into my.value
+  put (left.length + 1) into my.selectionStart
+  put (left.length + 1) into my.selectionEnd
+  {autoresizeMessageInput}
 |]
 
 handleSendMessageOnClick :: Attribute
@@ -177,9 +162,9 @@ handleSendMessageOnClick =
   hyper_
     [qc|
 on click
-if #message-input.value
-  {postMessageTemplate "#message-input.value"}
-  set #message-input.value to ''
-  {autoresizeMessageInput}
-end
+  if #message-input.value
+    {sendMessageTemplate "#message-input.value"}
+    set #message-input.value to ''
+    {autoresizeMessageInput}
+  end
 |]

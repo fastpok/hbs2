@@ -51,7 +51,7 @@ noSigilsMessage = do
   h2_ "No sigils available"
   p_ $ do
     "You can specify the sigils you want to use in the configuration file located at "
-    code_ "~/.config/hbs2-chat/config"
+    code_ "~/.config/" <> toHtml appName <> "/config"
 
 handleLogin :: Attribute
 handleLogin =
