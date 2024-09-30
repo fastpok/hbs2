@@ -34,7 +34,7 @@ instance FromJSON MySigil where
       Just sigil -> pure sigil
 
 newtype MyPublicKey = MyPublicKey {fromMyPublicKey :: PubKey 'Sign 'HBS2Basic}
-  deriving (Generic)
+  deriving (Eq, Generic)
   deriving newtype (Serialise, FromStringMaybe)
 
 instance FromJSON MyPublicKey where

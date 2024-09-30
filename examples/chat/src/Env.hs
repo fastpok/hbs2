@@ -26,7 +26,8 @@ data Env = Env
     storageAPI :: ServiceCaller StorageAPI UNIX,
     rpcSockPath :: FilePath,
     dbEnv :: DBPipeEnv,
-    wsSessions :: TVar (Map WSSessionID WSSession)
+    wsSessionsTVar :: TVar (Map WSSessionID WSSession),
+    chatUpdatesChan :: TChan MyRefChan
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -36,7 +37,8 @@ initEnv config = do
   refChanAPI <- makeServiceCaller @RefChanAPI peer
   storageAPI <- makeServiceCaller @StorageAPI peer
   dbEnv <- initDBEnv $ dbPath config
-  wsSessions <- newTVarIO Map.empty
+  wsSessionsTVar <- newTVarIO Map.empty
+  chatUpdatesChan <- newBroadcastTChanIO
   pure $ Env {..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv

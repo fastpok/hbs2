@@ -10,7 +10,6 @@ import Data.Time
 import Data.UUID.V4 qualified as UUID
 import Env
 import Error
-import HBS2.Clock
 import HBS2.Data.Types.SignedBox
 import HBS2.KeyMan.Keys.Direct
 import HBS2.Net.Auth.Credentials hiding (encode)
@@ -102,14 +101,20 @@ receiveLoop conn sessionID = do
       _ -> liftIO $ WS.sendTextData conn WSErrorBadMessage
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
-sendLoop conn sessionID = forever $ do
-  session <- getSessionByID sessionID
-  case headMay $ wsSessionSubscriptions session of
-    Nothing -> pause @'Seconds 2
-    Just chat -> do
-      messages <- withDB $ selectChatMessages chat
-      liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
-      pause @'Seconds 2
+sendLoop conn sessionID = do
+  wsSessionsTVar <- asks wsSessionsTVar
+  chatUpdatesChan' <- asks chatUpdatesChan
+  myChatUpdatesChan <- atomically $ dupTChan chatUpdatesChan'
+  forever $ do
+    chatUpdate <- atomically $ readTChan myChatUpdatesChan
+    wsSessionsTVar' <- readTVarIO wsSessionsTVar
+    let session = wsSessionsTVar' Map.! sessionID
+    case headMay $ wsSessionSubscriptions session of
+      Nothing -> pure ()
+      Just chat -> do
+        when (chatUpdate == chat) $ do
+          messages <- withDB $ selectChatMessages chat
+          liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
 
 postMessageToRefChan :: (MonadReader Env m, MonadUnliftIO m) => Message -> m ()
 postMessageToRefChan message = do
@@ -122,25 +127,25 @@ postMessageToRefChan message = do
 
 addWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSession -> m WSSessionID
 addWSSession wsSession = do
-  wsSessionsTVar <- asks wsSessions
+  wsSessionsTVar <- asks wsSessionsTVar
   wsSessionID <- liftIO UUID.nextRandom
   atomically $ modifyTVar wsSessionsTVar (Map.insert wsSessionID wsSession)
   pure wsSessionID
 
 -- wsSessionExists :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m Bool
 -- wsSessionExists wsSessionID = do
---   wsSessionsTVar <- asks wsSessions
---   wsSessions' <- readTVarIO wsSessionsTVar
---   pure $ Map.member wsSessionID wsSessions'
+--   wsSessionsTVar <- asks wsSessionsTVar
+--   wsSessionsTVar' <- readTVarIO wsSessionsTVar
+--   pure $ Map.member wsSessionID wsSessionsTVar'
 
 removeWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m ()
 removeWSSession wsSessionID = do
-  wsSessionsTVar <- asks wsSessions
+  wsSessionsTVar <- asks wsSessionsTVar
   atomically $ modifyTVar wsSessionsTVar (Map.delete wsSessionID)
 
 addSubscription :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyRefChan -> m ()
 addSubscription wsSessionID refChan = do
-  wsSessionsTVar <- asks wsSessions
+  wsSessionsTVar <- asks wsSessionsTVar
   atomically $ modifyTVar wsSessionsTVar (Map.adjust addSub wsSessionID)
   where
     addSub session =
@@ -149,9 +154,3 @@ addSubscription wsSessionID refChan = do
         -- for now we only have 1 active sub
         -- { wsSessionSubscriptions = refChan : wsSessionSubscriptions session
         }
-
-getSessionByID :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m WSSession
-getSessionByID wsSessionID = do
-  wsSessionsTVar <- asks wsSessions
-  wsSessions' <- readTVarIO wsSessionsTVar
-  pure $ wsSessions' Map.! wsSessionID

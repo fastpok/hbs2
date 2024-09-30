@@ -28,12 +28,13 @@ import UnliftIO
 
 refChanWorker :: (MonadUnliftIO m, MonadReader Env m) => m ()
 refChanWorker = do
-  config' <- asks config
-  let refChans' = refChans config'
-  fix \next -> do
-    forM_ refChans' loadChatMessages
+  refChans' <- asks (refChans . config)
+  chatUpdatesChan' <- asks chatUpdatesChan
+  forever do
+    forM_ refChans' \refChan -> do
+      loadChatMessages refChan
+      atomically $ writeTChan chatUpdatesChan' refChan
     pause @Seconds 2
-    next
 
 loadChatMessages :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 loadChatMessages refChan = do
