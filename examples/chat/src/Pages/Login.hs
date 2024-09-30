@@ -50,4 +50,8 @@ noSigilsMessage = do
     code_ "~/.config/hbs2-chat/config"
 
 handleLogin :: Attribute
-handleLogin = hyper_ "on click set localStorage.user to #user-select.value then go to url '/'"
+handleLogin =
+  hyper_
+    "on click \
+    \set localStorage.user to #user-select.value \
+    \go to url '/'"
