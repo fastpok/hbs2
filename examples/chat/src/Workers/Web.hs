@@ -1,7 +1,7 @@
 module Workers.Web (webWorker) where
 
 import Codec.Serialise
-import Control.Monad.Cont
+import Control.Monad
 import Control.Monad.Reader
 import DB
 import Data.ByteString.Lazy qualified as BSL

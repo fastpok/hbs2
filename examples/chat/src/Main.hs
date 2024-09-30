@@ -1,6 +1,7 @@
 module Main where
 
 import Config
+import Control.Monad
 import Control.Monad.Reader
 import Env
 import UnliftIO

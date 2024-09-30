@@ -5,6 +5,7 @@ import Components.Icons
 import Components.LogoutButton
 import Components.ThemeToggleButton
 import Config
+import Control.Monad
 import Control.Monad.Reader
 import Data.Text (Text)
 import Data.Text qualified as Text
