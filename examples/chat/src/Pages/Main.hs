@@ -155,9 +155,11 @@ on input {autoresizeMessageInput}
 
 on keydown[(key is 'Enter') and (not ctrlKey)]
 halt the event
-{postMessageTemplate "my.value"}
-set my.value to ''
-{autoresizeMessageInput}
+if my.value
+  {postMessageTemplate "my.value"}
+  set my.value to ''
+  {autoresizeMessageInput}
+end
 
 on keydown[(key is 'Enter') and ctrlKey]
 pick items start to my.selectionStart from my.value
@@ -175,7 +177,9 @@ handleSendMessageOnClick =
   hyper_
     [qc|
 on click
-{postMessageTemplate "#message-input.value"}
-set #message-input.value to ''
-{autoresizeMessageInput}
+if #message-input.value
+  {postMessageTemplate "#message-input.value"}
+  set #message-input.value to ''
+  {autoresizeMessageInput}
+end
 |]
