@@ -3,13 +3,13 @@ module Workers.RefChan where
 import Codec.Serialise
 import Config
 import Control.Monad
-import Control.Monad.Cont
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import DB
 import Data.ByteString.Lazy qualified as BSL
 import Env
 import Error
+import HBS2.Base58
 import HBS2.Data.Types
 import HBS2.Data.Types.SignedBox
 import HBS2.Merkle
@@ -34,9 +34,10 @@ refChanWorker = do
   sink <- asks refChanNotifySink
   notifyWorkers <- forM refChans' \refChan -> async do
     runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChan) $ \case
-      RefChanNotifyData _ _ -> do
+      RefChanUpdated _ _ -> do
         loadChatMessages refChan
         atomically $ writeTChan chatUpdatesChan' refChan
+      _ -> pure ()
   void $ waitAnyCancel notifyWorkers
 
 loadChatMessages :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
