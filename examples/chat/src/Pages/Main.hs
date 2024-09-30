@@ -14,6 +14,7 @@ import HBS2.Base58
 import Lucid
 import Monad
 import Prettyprinter
+import Text.InterpolatedString.Perl6 (qc)
 import Utils.Attributes
 import Web.Scotty.Trans
 
@@ -67,7 +68,6 @@ htmlBody refChans' = body_ [class_ "h-screen", checkLogin] $ do
               placeholder_ "Message",
               ariaLabel_ "Message",
               rows_ "1",
-              oninput_ "autoResize(this)",
               handleMessageInput
             ]
             ""
@@ -134,28 +134,56 @@ handleChatSelect = hyper_ "on click set global chat to @data-value"
 checkLogin :: Attribute
 checkLogin =
   hyper_
-    "on load \
-    \if not localStorage.user \
-    \go to url '/login'"
+    [qc|
+on load
+if not localStorage.user
+go to url '/login'
+|]
+
+autoresizeMessageInput :: String
+autoresizeMessageInput =
+  [qc|
+js autoResize(document.getElementById('message-input')) end
+|]
+
+postMessageTemplate :: Text -> String
+postMessageTemplate message =
+  [qc|
+fetch /message with
+\{
+  method:'POST',
+  headers: \{'Content-Type': 'application/json'},
+  body: \{
+    message: {message},
+    author: localStorage.user,
+    chat: chat
+  }
+}
+|]
 
 handleMessageInput :: Attribute
 handleMessageInput =
   hyper_
-    "on keydown[key=='Enter' and (not event.ctrlKey)] \
-    \halt the event \
-    \log my.value \
-    \set my.value to '' \
-    \js autoResize(document.getElementById('message-input')) \
-    \end \
-    \on keydown[key=='Enter' and event.ctrlKey] \
-    \put (my.value + '\\n') into my.value \
-    \js autoResize(document.getElementById('message-input')) \
-    \end"
+    [qc|
+on input {autoresizeMessageInput}
+
+on keydown[key=='Enter' and (not event.ctrlKey)]
+halt the event
+{postMessageTemplate "my.value"}
+set my.value to ''
+{autoresizeMessageInput}
+
+on keydown[key=='Enter' and event.ctrlKey]
+put (my.value + '\\n') into my.value
+{autoresizeMessageInput}
+|]
 
 handleSendMessageOnClick :: Attribute
 handleSendMessageOnClick =
   hyper_
-    "on click \
-    \log #message-input.value \
-    \set #message-input.value to '' \
-    \js autoResize(document.getElementById('message-input'))"
+    [qc|
+on click
+{postMessageTemplate "#message-input.value"}
+set #message-input.value to ''
+{autoresizeMessageInput}
+|]

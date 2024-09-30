@@ -9,6 +9,7 @@ import Env
 import Lucid
 import Monad
 import Prettyprinter
+import Text.InterpolatedString.Perl6 (qc)
 import Utils.Attributes
 import Web.Scotty.Trans
 
@@ -52,6 +53,8 @@ noSigilsMessage = do
 handleLogin :: Attribute
 handleLogin =
   hyper_
-    "on click \
-    \set localStorage.user to #user-select.value \
-    \go to url '/'"
+    [qc|
+on click
+set localStorage.user to #user-select.value
+go to url '/'
+|]

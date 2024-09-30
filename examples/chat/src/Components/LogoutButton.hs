@@ -2,6 +2,7 @@ module Components.LogoutButton (logoutButton) where
 
 import Components.Icons
 import Lucid
+import Text.InterpolatedString.Perl6 (qc)
 import Utils.Attributes
 
 logoutButton :: Html ()
@@ -18,6 +19,8 @@ logoutButton = button_
 handleLogout :: Attribute
 handleLogout =
   hyper_
-    "on click \
-    \js localStorage.removeItem('user') end \
-    \go to url '/login'"
+    [qc|
+on click
+call localStorage.removeItem('user')
+go to url '/login'
+|]
