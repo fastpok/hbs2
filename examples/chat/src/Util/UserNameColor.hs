@@ -1,10 +1,7 @@
 module Util.UserNameColor where
 
-import Config
 import Data.Hashable (hash)
 import Data.Text (Text)
-import Util.Attributes
-import Web.Scotty.Trans
 
 colorNames :: [Text]
 colorNames =

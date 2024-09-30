@@ -183,6 +183,7 @@
 .message-header {
   display: flex;
   justify-content: space-between;
+  gap: calc(var(--pico-spacing) * 0.5);
 }
 
 .message-input-wrapper {

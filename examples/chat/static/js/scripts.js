@@ -11,3 +11,7 @@ function autoResize(element) {
     element.style.overflowY = "auto";
   }
 }
+
+function scrollDown(element) {
+  element.scrollTop = element.scrollHeight;
+}

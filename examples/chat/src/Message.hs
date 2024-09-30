@@ -8,7 +8,7 @@ import Data.Aeson hiding (encode, json)
 import Data.Aeson.Types (Parser)
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
-import Data.List (sortOn)
+import Data.List qualified as L
 import Data.Text qualified as T
 import Data.Time
 import Env
@@ -25,7 +25,7 @@ import HBS2.Peer.Proto.RefChan
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.StorageClient
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
-import HBS2.Prelude
+import HBS2.Prelude hiding (line)
 import HBS2.Storage
 import Lucid hiding (for_)
 import Monad
@@ -66,7 +66,7 @@ createMessage author message time =
       div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
       div_ $ small_ $ toHtml time
     div_ [class_ "message-content"] $ do
-      small_ $ toHtml message
+      small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines message)
 
 orFailWith :: Maybe a -> String -> Parser a
 orFailWith maybeValue errorMsg = maybe (fail errorMsg) return maybeValue
@@ -130,4 +130,4 @@ getMessages = do
               Right msg ->
                 lift $
                   S.yield msg
-  html $ mconcat $ renderText . toHtml <$> sortOn messageRespTime messages
+  html $ mconcat $ renderText . toHtml <$> L.sortOn messageRespTime messages

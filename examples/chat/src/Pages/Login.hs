@@ -4,7 +4,7 @@ import Components.Head
 import Components.ThemeToggleButton
 import Config
 import Control.Monad.Reader
-import Data.Text qualified as Text
+import Data.Text qualified as T
 import Env
 import HBS2.Base58
 import HBS2.Net.Auth.Credentials.Sigil (Sigil (..))
@@ -41,8 +41,8 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
             div_ [role_ "group"] $ do
               select_ [name_ "sigil", id_ "user-select", ariaLabel_ "Select user", required_ ""] $ do
                 forM_ someSigils $ \sigil ->
-                  let sigilText = Text.pack $ show $ pretty $ AsBase58 $ sigilSignPk sigil
-                      sigilBase58 = Text.pack $ show $ pretty $ AsBase58 sigil
+                  let sigilText = T.pack $ show $ pretty $ AsBase58 $ sigilSignPk sigil
+                      sigilBase58 = T.pack $ show $ pretty $ AsBase58 sigil
                    in option_ [value_ sigilBase58] $ toHtml sigilText
               button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
 

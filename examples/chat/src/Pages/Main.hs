@@ -6,7 +6,6 @@ import Components.LogoutButton
 import Components.ThemeToggleButton
 import Config
 import Control.Monad.Reader
-import Data.Hashable (hash)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Env
@@ -126,6 +125,12 @@ autoresizeMessageInput =
 js autoResize(document.getElementById('message-input')) end
 |]
 
+scrollDown :: String
+scrollDown =
+  [qc|
+js scrollDown(document.getElementById('messages')) end
+|]
+
 postMessageTemplate :: Text -> String
 postMessageTemplate message =
   [qc|
@@ -148,14 +153,20 @@ handleMessageInput =
     [qc|
 on input {autoresizeMessageInput}
 
-on keydown[key=='Enter' and (not event.ctrlKey)]
+on keydown[(key is 'Enter') and (not ctrlKey)]
 halt the event
 {postMessageTemplate "my.value"}
 set my.value to ''
 {autoresizeMessageInput}
 
-on keydown[key=='Enter' and event.ctrlKey]
-put (my.value + '\\n') into my.value
+on keydown[(key is 'Enter') and ctrlKey]
+pick items start to my.selectionStart from my.value
+set left to it
+pick items my.selectionEnd to end from my.value
+set right to it
+put (left + '\\n' + right) into my.value
+put (left.length + 1) into my.selectionStart
+put (left.length + 1) into my.selectionEnd
 {autoresizeMessageInput}
 |]
 
