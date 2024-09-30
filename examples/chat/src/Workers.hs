@@ -17,6 +17,7 @@ dbWorker = do
   dbEnv' <- asks dbEnv
   runPipe dbEnv'
 
+-- test
 runWorkers :: (MonadReader Env m, MonadUnliftIO m) => m [Async ()]
 runWorkers = do
   dbWorker' <- async dbWorker
