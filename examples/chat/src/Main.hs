@@ -10,12 +10,13 @@ import Pages.Main
 import Web.Scotty.Trans
 
 main :: IO ()
-main = scottyT 3000 runIO application
+main = do
+  config <- getConfig
+  env <- initEnv config
+  scottyT 3000 (runIO env) application
   where
-    runIO :: AppM a -> IO a
-    runIO m = do
-      config <- getConfig
-      withEnv config $ runReaderT $ runAppM m
+    runIO :: Env -> AppM a -> IO a
+    runIO env m = runReaderT (runAppM m) env
 
 application :: ScottyT AppM ()
 application = do

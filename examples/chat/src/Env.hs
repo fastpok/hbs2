@@ -1,6 +1,6 @@
 module Env
   ( Env (..),
-    withEnv,
+    initEnv,
   )
 where
 
@@ -21,8 +21,8 @@ data Env = Env
     storageAPI :: ServiceCaller StorageAPI UNIX
   }
 
-withEnv :: (MonadUnliftIO m) => Config -> (Env -> m a) -> m a
-withEnv config action = do
+initEnv :: (MonadUnliftIO m) => Config -> m Env
+initEnv config = do
   rpcSockPath <- detectRPC `orDie` "can't locate hbs2-peer rpc"
   client <- newMessagingUnix False 1.0 rpcSockPath
   void $ async $ runMessagingUnix client
@@ -40,4 +40,4 @@ withEnv config action = do
             refChanAPI = refChanAPI,
             storageAPI = storageAPI
           }
-  action env
+  pure env
