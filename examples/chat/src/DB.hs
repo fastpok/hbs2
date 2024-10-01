@@ -46,5 +46,6 @@ selectChatMessages refChan = do
     [qc|
       select * from messages
       where chat_id = ?
+      order by created_at
     |]
     (Only refChan)

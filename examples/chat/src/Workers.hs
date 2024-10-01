@@ -25,12 +25,10 @@ runWorkers = do
   client <- newMessagingUnix False 1.0 rpcSockPath'
   messagingUnix <- async $ runMessagingUnix client
   serviceClientWorker' <- async $ serviceClientWorker client
-
   refChanNotifyClient <- newMessagingUnix False 1.0 rpcSockPath'
   refChanNotifyMessagingUnix <- async $ runMessagingUnix refChanNotifyClient
   refChanNotifyClientWorker' <- async $ refChanNotifyClientWorker refChanNotifyClient
   refChanNotifyWorker' <- async $ refChanNotifyWorker refChanNotifyClient
-
   refChanWorker' <- async refChanWorker
   pure
     [ dbWorker',
