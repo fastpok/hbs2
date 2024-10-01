@@ -12,6 +12,13 @@ function autoResize(element) {
   }
 }
 
-function scrollDown(element) {
+function isElementScrolledToBottom(element) {
+  return (
+    Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) <=
+    1
+  );
+}
+
+function scrollToBottom(element) {
   element.scrollTop = element.scrollHeight;
 }

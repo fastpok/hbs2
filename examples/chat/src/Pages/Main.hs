@@ -101,7 +101,7 @@ on click
   send subscribe(chat: chat) to WebSocket
 |]
 
--- TODO: scroll down automatically only when we already at bottom
+-- TODO: scroll to bottom automatically when sending a message
 initScript :: Html ()
 initScript =
   script_ [type_ "text/hyperscript"] $
@@ -110,8 +110,13 @@ initScript =
 def initWebSocket()
   socket WebSocket /
     on message
+      js
+        return isElementScrolledToBottom(document.getElementById('messages'))
+      end
+      set isScrolledToBottom to it
       put message into #messages.innerHTML
-      {scrollDown}
+      if isScrolledToBottom
+        {scrollToBottom}
 end
 
 init
@@ -127,10 +132,10 @@ autoresizeMessageInput =
 js autoResize(document.getElementById('message-input')) end
 |]
 
-scrollDown :: String
-scrollDown =
+scrollToBottom :: String
+scrollToBottom =
   [qc|
-js scrollDown(document.getElementById('messages')) end
+js scrollToBottom(document.getElementById('messages')) end
 |]
 
 sendMessageTemplate :: Text -> String
