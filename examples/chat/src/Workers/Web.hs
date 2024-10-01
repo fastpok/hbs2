@@ -29,6 +29,7 @@ import Pages.Main
 import Types
 import UnliftIO
 import Web.Scotty.Trans
+import Workers.RefChan
 
 webWorker :: (MonadReader Env m, MonadUnliftIO m) => m ()
 webWorker = do
@@ -93,8 +94,10 @@ receiveLoop conn sessionID = do
     wsData <- liftIO $ WS.receiveData conn
     case wsData of
       WSProtocolSubscribe wsSubscribe -> do
-        addSubscription sessionID (wsSubscribeRefChan wsSubscribe)
-        messages <- withDB $ selectChatMessages $ wsSubscribeRefChan wsSubscribe
+        let refChan = wsSubscribeRefChan wsSubscribe
+        addSubscription sessionID refChan
+        loadChatMessages refChan
+        messages <- withDB $ selectChatMessages refChan
         liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
       WSProtocolMessage wsMessage -> do
         message <- wsMessageToMessage wsMessage
