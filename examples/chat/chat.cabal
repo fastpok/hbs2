@@ -74,6 +74,7 @@ executable chat
                   , Components.LogoutButton
                   , Util.Attributes
                   , Util.UserNameColor
+                  , Util.Text
                   , Config
                   , Env
                   , Monad
@@ -117,3 +118,5 @@ executable chat
                   , wai
                   , wai-websockets
                   , uuid
+                  , microlens-mtl
+                  , unordered-containers

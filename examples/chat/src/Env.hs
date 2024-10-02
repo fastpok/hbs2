@@ -30,7 +30,7 @@ data Env = Env
     refChanNotifySink :: NotifySink (RefChanEvents L4Proto) UNIX,
     dbEnv :: DBPipeEnv,
     wsSessionsTVar :: TVar (Map WSSessionID WSSession),
-    chatUpdatesChan :: TChan MyRefChan
+    chatEventsChan :: TChan ChatEvent
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -41,7 +41,7 @@ initEnv config = do
   storageAPI <- makeServiceCaller @StorageAPI peer
   dbEnv <- initDBEnv $ dbPath config
   wsSessionsTVar <- newTVarIO Map.empty
-  chatUpdatesChan <- newBroadcastTChanIO
+  chatEventsChan <- newBroadcastTChanIO
   refChanNotifySink <- newNotifySink
   pure $ Env {..}
 

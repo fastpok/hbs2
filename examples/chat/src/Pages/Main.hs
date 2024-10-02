@@ -16,7 +16,7 @@ import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
 import Util.Attributes
-import Util.UserNameColor
+import Util.Text
 import Web.Scotty.Trans
 
 mainPage :: ActionT AppM ()
@@ -68,23 +68,7 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
                 [class_ "outline send-message", handleSendMessageClick]
                 $ makeIcon PaperAirplane
     div_ [class_ "members-header wrapper-item header-color"] "Members"
-    div_ [class_ "members wrapper-item"] $ do
-      pure ()
-
--- createMember "Гэндальф"
--- createMember "Арагорн"
--- createMember "Фродо"
-
-createMember :: Text -> Html ()
-createMember username = p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml username
-
-shorten :: Int -> Text -> Text
-shorten n t =
-  if Text.length t > n
-    then Text.take m t <> "..." <> Text.takeEnd m t
-    else t
-  where
-    m = n `div` 2
+    div_ [class_ "members wrapper-item", id_ "members"] ""
 
 handleChatSelect :: Attribute
 handleChatSelect =
@@ -109,14 +93,21 @@ initScript =
       [qc|
 def initWebSocket()
   socket WebSocket /
-    on message
-      js
-        return isElementScrolledToBottom(document.getElementById('messages'))
+    on message as json
+      if message.type is 'messages'
+        js
+          return isElementScrolledToBottom(document.getElementById('messages'))
+        end
+        set isScrolledToBottom to it
+        put message.data into #messages.innerHTML
+        if isScrolledToBottom
+          {scrollToBottom}
+        end
+      else
+        if message.type is 'members'
+          put message.data into #members.innerHTML
+        end
       end
-      set isScrolledToBottom to it
-      put message into #messages.innerHTML
-      if isScrolledToBottom
-        {scrollToBottom}
 end
 
 init

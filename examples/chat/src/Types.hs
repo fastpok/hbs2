@@ -3,7 +3,7 @@ module Types where
 import Codec.Serialise
 import DBPipe.SQLite
 import Data.Aeson hiding (encode, json)
-import Data.Aeson.Decoding qualified as AD
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Parser)
 import Data.List qualified as L
 import Data.Maybe
@@ -21,6 +21,7 @@ import HBS2.Prelude
 import Lucid
 import Network.WebSockets (WebSocketsData)
 import Network.WebSockets qualified as WS
+import Util.Text
 import Util.UserNameColor
 
 newtype MySigil = MySigil {fromMySigil :: Sigil 'HBS2Basic}
@@ -56,6 +57,13 @@ instance ToField MyPublicKey where
   toField (MyPublicKey k) = toField $ show $ pretty (AsBase58 k)
 
 type MyRefChan = MyPublicKey
+
+newtype MyEncryptionPublicKey = MyEncryptionPublicKey {fromMyEncryptionPublicKey :: PubKey 'Encrypt 'HBS2Basic}
+  deriving (Eq, Generic)
+  deriving newtype (Serialise, FromStringMaybe)
+
+instance Pretty (AsBase58 MyEncryptionPublicKey) where
+  pretty (AsBase58 (MyEncryptionPublicKey k)) = pretty (AsBase58 k)
 
 newtype MyHash = MyHash {fromMyHash :: Hash HbSync}
   deriving stock (Eq, Ord, Show, Generic)
@@ -111,6 +119,21 @@ data WSProtocolMessage
   = WSProtocolSubscribe WSSubscribe
   | WSProtocolMessage WSMessage
   | WSProtocolMessages WSMessages
+  | WSProtocolMembers WSMembers
+
+instance ToJSON WSProtocolMessage where
+  toJSON (WSProtocolSubscribe _) = undefined
+  toJSON (WSProtocolMessage _) = undefined
+  toJSON (WSProtocolMessages msg) =
+    object
+      [ "type" .= ("messages" :: Text),
+        "data" .= renderText (toHtml msg)
+      ]
+  toJSON (WSProtocolMembers msg) =
+    object
+      [ "type" .= ("members" :: Text),
+        "data" .= renderText (toHtml msg)
+      ]
 
 instance FromJSON WSProtocolMessage where
   parseJSON = withObject "WSProtocolMessage" $ \v -> do
@@ -122,12 +145,11 @@ instance FromJSON WSProtocolMessage where
       _ -> fail $ "Unknown message type: " <> show messageType
 
 instance WebSocketsData WSProtocolMessage where
-  fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolMessage decode error" $ AD.decode $ TLE.encodeUtf8 tl
-  fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolMessage decode error" $ AD.decode bl
-  fromDataMessage (WS.Binary bl) = orError "WSProtocolMessage decode error" $ AD.decode bl
-  fromLazyByteString = orError "WSProtocolMessage decode error" . AD.decode
-  toLazyByteString (WSProtocolMessages messages) = TLE.encodeUtf8 $ renderText $ toHtml messages
-  toLazyByteString _ = undefined
+  fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolMessage decode error" $ Aeson.decode $ TLE.encodeUtf8 tl
+  fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
+  fromDataMessage (WS.Binary bl) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
+  fromLazyByteString = orError "WSProtocolMessage decode error" . Aeson.decode
+  toLazyByteString = Aeson.encode
 
 data WSSubscribe = WSSubscribe
   { wsSubscribeRefChan :: MyRefChan
@@ -161,3 +183,41 @@ data WSMessages = WSMessages [Message]
 instance ToHtml WSMessages where
   toHtml (WSMessages messages) = mapM_ toHtml messages
   toHtmlRaw = toHtml
+
+newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}
+
+instance ToHtml AuthorMember where
+  toHtml (AuthorMember key) =
+    let username = T.pack $ show $ pretty $ AsBase58 key
+     in p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml $ shorten 8 username
+  toHtmlRaw = toHtml
+
+newtype ReaderMember = ReaderMember {fromReaderMember :: MyEncryptionPublicKey}
+
+instance ToHtml ReaderMember where
+  toHtml (ReaderMember key) =
+    let username = T.pack $ show $ pretty $ AsBase58 key
+     in p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml $ shorten 8 username
+  toHtmlRaw = toHtml
+
+data WSMembers = WSMembers
+  { wsMembersReaders :: [ReaderMember],
+    wsMembersAuthors :: [AuthorMember]
+  }
+
+instance ToHtml WSMembers where
+  toHtml (WSMembers {..}) = do
+    p_ "Authors"
+    mapM_ toHtml wsMembersAuthors
+    p_ [class_ "mt-1"] "Readers"
+    mapM_ toHtml wsMembersReaders
+
+  toHtmlRaw = toHtml
+
+data ChatEvent
+  = MessagesEvent MyRefChan
+  | MembersEvent
+      { membersEventRefChan :: MyRefChan,
+        membersEventAuthors :: [AuthorMember],
+        membersEventReaders :: [ReaderMember]
+      }

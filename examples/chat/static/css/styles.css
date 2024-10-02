@@ -2,6 +2,10 @@
   margin-bottom: 0;
 }
 
+.mt-1 {
+  margin-top: var(--pico-spacing);
+}
+
 .h-screen {
   height: 100vh;
 }

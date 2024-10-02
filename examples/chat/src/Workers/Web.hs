@@ -99,6 +99,8 @@ receiveLoop conn sessionID = do
         loadChatMessages refChan
         messages <- withDB $ selectChatMessages refChan
         liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
+        members <- getChatMembersFromRefChan refChan
+        liftIO $ WS.sendTextData conn $ WSProtocolMembers members
       WSProtocolMessage wsMessage -> do
         message <- wsMessageToMessage wsMessage
         withDB $ insertMessage message
@@ -108,18 +110,26 @@ receiveLoop conn sessionID = do
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 sendLoop conn sessionID = do
   wsSessionsTVar <- asks wsSessionsTVar
-  chatUpdatesChan' <- asks chatUpdatesChan
-  myChatUpdatesChan <- atomically $ dupTChan chatUpdatesChan'
+  chatEventsChan' <- asks chatEventsChan
+  myChatEventsChan <- atomically $ dupTChan chatEventsChan'
   forever $ do
-    chatUpdate <- atomically $ readTChan myChatUpdatesChan
+    chatEvent <- atomically $ readTChan myChatEventsChan
     wsSessionsTVar' <- readTVarIO wsSessionsTVar
     let session = wsSessionsTVar' Map.! sessionID
     case headMay $ wsSessionSubscriptions session of
       Nothing -> pure ()
-      Just chat -> do
-        when (chatUpdate == chat) $ do
+      Just chat -> case chatEvent of
+        MessagesEvent eventChat -> when (eventChat == chat) $ do
           messages <- withDB $ selectChatMessages chat
           liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
+        MembersEvent {..} -> when (membersEventRefChan == chat) $ do
+          liftIO $
+            WS.sendTextData conn $
+              WSProtocolMembers $
+                WSMembers
+                  { wsMembersReaders = membersEventReaders,
+                    wsMembersAuthors = membersEventAuthors
+                  }
 
 postMessageToRefChan :: (MonadReader Env m, MonadUnliftIO m) => Message -> m ()
 postMessageToRefChan message = do
