@@ -50,7 +50,7 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
     div_ [class_ "content wrapper-item"] $ do
       div_ [id_ "chat-placeholder"] $ p_ "Select a chat"
       div_ [class_ "hidden", id_ "chat"] $ do
-        div_ [class_ "messages", id_ "messages"] ""
+        div_ [class_ "messages", id_ "messages", handleNotifications] ""
         div_ [class_ "message-input-wrapper"] $
           fieldset_ [role_ "group", class_ "mb-0"] $
             do
@@ -96,7 +96,7 @@ def initWebSocket()
   socket WebSocket /
     on message as json
       if message.type is 'messages'
-        call showNotification(message)
+        send notification(payload: message) to #messages
         js
           return isElementScrolledToBottom(document.getElementById('messages'))
         end
@@ -177,4 +177,12 @@ on click
     set #message-input.value to ''
     {autoresizeMessageInput}
   end
+|]
+
+handleNotifications :: Attribute
+handleNotifications =
+  hyper_
+    [qc|
+on notification(payload) throttled at 20s
+  call showNotification(payload)
 |]
