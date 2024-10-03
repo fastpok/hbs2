@@ -75,7 +75,8 @@ handleChatSelect =
   hyper_
     [qc|
 on click
-  set #messages.innerText to ''
+  set #messages.innerHTML to ''
+  set #members.innerHTML to ''
   set global chat to @data-value
   remove .active from .chat-button
   add .active to me
