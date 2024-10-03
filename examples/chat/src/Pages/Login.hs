@@ -5,7 +5,11 @@ import Components.ThemeToggleButton
 import Config
 import Control.Monad
 import Control.Monad.Reader
+import Data.Aeson
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Text qualified as Aeson
 import Data.Text qualified as T
+import Data.Text.Lazy qualified as TL
 import Env
 import HBS2.Base58
 import HBS2.Net.Auth.Credentials.Sigil (Sigil (..))
@@ -43,9 +47,15 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
             div_ [role_ "group"] $ do
               select_ [name_ "sigil", id_ "user-select", ariaLabel_ "Select user", required_ ""] $ do
                 forM_ someSigils $ \sigil ->
-                  let sigilText = T.pack $ show $ pretty $ AsBase58 $ sigilSignPk $ fromMySigil sigil
-                      sigilBase58 = T.pack $ show $ pretty $ AsBase58 $ fromMySigil sigil
-                   in option_ [value_ sigilBase58] $ toHtml sigilText
+                  let sigilSignPublicKey = T.pack $ show $ pretty $ AsBase58 $ sigilSignPk $ fromMySigil sigil
+                      userData =
+                        TL.toStrict $
+                          Aeson.encodeToLazyText $
+                            Aeson.object
+                              [ "sigil" .= T.pack (show $ pretty $ AsBase58 $ fromMySigil sigil),
+                                "publicKey" .= sigilSignPublicKey
+                              ]
+                   in option_ [value_ userData] $ toHtml sigilSignPublicKey
               button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
 
 noSigilsMessage :: Html ()

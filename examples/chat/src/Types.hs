@@ -48,13 +48,16 @@ instance IsString MyPublicKey where
   fromString s = fromMaybe (error "bad public key base58") (fromStringMay s)
 
 instance Pretty (AsBase58 MyPublicKey) where
-  pretty (AsBase58 (MyPublicKey k)) = pretty (AsBase58 k)
+  pretty (AsBase58 (MyPublicKey k)) = pretty $ AsBase58 k
 
 instance FromField MyPublicKey where
   fromField = fmap fromString . fromField @String
 
 instance ToField MyPublicKey where
-  toField (MyPublicKey k) = toField $ show $ pretty (AsBase58 k)
+  toField (MyPublicKey k) = toField $ show $ pretty $ AsBase58 k
+
+instance ToJSON MyPublicKey where
+  toJSON (MyPublicKey k) = toJSON $ show $ pretty $ AsBase58 k
 
 type MyRefChan = MyPublicKey
 
@@ -97,6 +100,15 @@ instance FromRow Message where
     messageCreatedAt <- field
     pure Message {..}
 
+instance ToJSON Message where
+  toJSON (Message {..}) =
+    object
+      [ "author" .= messageAuthor,
+        "chat" .= messageChat,
+        "body" .= messageBody,
+        "createdAt" .= messageCreatedAt
+      ]
+
 instance ToHtml Message where
   toHtml Message {..} = div_ [class_ "message"] $ do
     div_ [class_ "message-header"] $ do
@@ -127,7 +139,11 @@ instance ToJSON WSProtocolMessage where
   toJSON (WSProtocolMessages msg) =
     object
       [ "type" .= ("messages" :: Text),
-        "data" .= renderText (toHtml msg)
+        "data"
+          .= object
+            [ "html" .= renderText (toHtml msg),
+              "json" .= msg
+            ]
       ]
   toJSON (WSProtocolMembers msg) =
     object
@@ -178,7 +194,8 @@ instance FromJSON WSMessage where
           wsMessageBody = body
         }
 
-data WSMessages = WSMessages [Message]
+newtype WSMessages = WSMessages {fromWSMessages :: [Message]}
+  deriving newtype (ToJSON)
 
 instance ToHtml WSMessages where
   toHtml (WSMessages messages) = mapM_ toHtml messages

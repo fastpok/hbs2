@@ -96,11 +96,12 @@ def initWebSocket()
   socket WebSocket /
     on message as json
       if message.type is 'messages'
+        call showNotification(message)
         js
           return isElementScrolledToBottom(document.getElementById('messages'))
         end
         set isScrolledToBottom to it
-        put message.data into #messages.innerHTML
+        put message.data.html into #messages.innerHTML
         if isScrolledToBottom
           {scrollToBottom}
         end
@@ -133,10 +134,11 @@ js scrollToBottom(document.getElementById('messages')) end
 sendMessageTemplate :: Text -> String
 sendMessageTemplate message =
   [qc|
+set user to (localStorage.user as Object) 
 send message(
   body: {message},
   chat: chat,
-  author: localStorage.user
+  author: user.sigil
 ) to WebSocket
 |]
 
