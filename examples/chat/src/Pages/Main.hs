@@ -29,8 +29,28 @@ mainPage = do
       htmlHead
       htmlBody refChans'
 
+-- def initWebSocket()
+--   socket WebSocket /
+--     on message as json
+--       if message.type is 'messages'
+--         send notification(payload: message) to #messages
+--         js
+--           return isElementScrolledToBottom(document.getElementById('messages'))
+--         end
+--         set isScrolledToBottom to it
+--         put message.data.html into #messages.innerHTML
+--         if isScrolledToBottom
+--           {scrollToBottom}
+--         end
+--       else
+--         if message.type is 'members'
+--           put message.data into #members.innerHTML
+--         end
+--       end
+-- end
+
 htmlBody :: [MyRefChan] -> Html ()
-htmlBody refChans' = body_ [class_ "h-screen"] $ do
+htmlBody refChans' = body_ [class_ "h-screen", hxExt_ "ws", wsConnect_ "/"] $ do
   initScript
   div_ [class_ "wrapper"] $ do
     div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
@@ -52,21 +72,22 @@ htmlBody refChans' = body_ [class_ "h-screen"] $ do
       div_ [class_ "hidden", id_ "chat"] $ do
         div_ [class_ "messages", id_ "messages", handleNotifications] ""
         div_ [class_ "message-input-wrapper"] $
-          fieldset_ [role_ "group", class_ "mb-0"] $
-            do
-              textarea_
-                [ class_ "message-input",
-                  id_ "message-input",
-                  name_ "input",
-                  placeholder_ "Message",
-                  ariaLabel_ "Message",
-                  rows_ "1",
-                  handleMessageInput
-                ]
-                ""
-              button_
-                [class_ "outline send-message", handleSendMessageClick]
-                $ makeIcon PaperAirplane
+          form_ [wsSend_ ""] $
+            fieldset_ [role_ "group", class_ "mb-0"] $
+              do
+                textarea_
+                  [ class_ "message-input",
+                    id_ "message-input",
+                    name_ "input",
+                    placeholder_ "Message",
+                    ariaLabel_ "Message",
+                    rows_ "1",
+                    handleMessageInput
+                  ]
+                  ""
+                button_
+                  [class_ "outline send-message", handleSendMessageClick]
+                  $ makeIcon PaperAirplane
     div_ [class_ "members-header wrapper-item header-color"] "Members"
     div_ [class_ "members wrapper-item", id_ "members"] ""
 
@@ -92,31 +113,10 @@ initScript =
   script_ [type_ "text/hyperscript"] $
     toHtmlRaw @String
       [qc|
-def initWebSocket()
-  socket WebSocket /
-    on message as json
-      if message.type is 'messages'
-        send notification(payload: message) to #messages
-        js
-          return isElementScrolledToBottom(document.getElementById('messages'))
-        end
-        set isScrolledToBottom to it
-        put message.data.html into #messages.innerHTML
-        if isScrolledToBottom
-          {scrollToBottom}
-        end
-      else
-        if message.type is 'members'
-          put message.data into #members.innerHTML
-        end
-      end
-end
-
 init
   if not localStorage.user
     go to url '/login'
   end
-  initWebSocket()
 |]
 
 autoresizeMessageInput :: String
