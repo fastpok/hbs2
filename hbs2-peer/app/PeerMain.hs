@@ -1120,7 +1120,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
 
                 peerThread "lwwRefWorker" (lwwRefWorker @e conf (SomeBrains brains))
 
-                mbw <- createMailboxProtoWorker @L4Proto
+                mbw <- createMailboxProtoWorker @e
                 peerThread "mailboxProtoWorker" (mailboxProtoWorker mbw)
 
                 liftIO $ withPeerM penv do
