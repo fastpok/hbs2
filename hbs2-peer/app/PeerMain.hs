@@ -916,6 +916,8 @@ runPeer opts = respawnOnError opts $ runResourceT do
 
   rcw <- async $ liftIO $ runRefChanRelyWorker rce refChanAdapter
 
+  mailboxWorker <- createMailboxProtoWorker @e (AnyStorage s)
+
   let onNoBlock (p, h) = do
         already <- liftIO $ Cache.lookup nbcache (p,h) <&> isJust
         unless already do
@@ -1125,13 +1127,12 @@ runPeer opts = respawnOnError opts $ runResourceT do
                 peerThread "lwwRefWorker" (lwwRefWorker @e conf (SomeBrains brains))
 
                 -- setup mailboxes stuff
-                mbw <- createMailboxProtoWorker @e (AnyStorage s)
                 let defConf = coerce conf
                 let mboxConf = maybe1 pref defConf $ \p -> do
                        let mboxDir = takeDirectory (coerce p) </> "hbs2-mailbox"
                        mkList [mkSym hbs2MailboxDirOpt, mkStr mboxDir] : coerce defConf
 
-                peerThread "mailboxProtoWorker" (mailboxProtoWorker (pure mboxConf) mbw)
+                peerThread "mailboxProtoWorker" (mailboxProtoWorker (pure mboxConf) mailboxWorker)
 
                 liftIO $ withPeerM penv do
                   runProto @e
@@ -1149,7 +1150,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
                     , makeResponse (refChanNotifyProto False refChanAdapter)
                     -- TODO: change-all-to-authorized
                     , makeResponse ((authorized . subscribed (SomeBrains brains)) lwwRefProtoA)
-                    , makeResponse ((authorized . mailboxProto) mbw)
+                    , makeResponse ((authorized . mailboxProto) mailboxWorker)
                     ]
 
 
@@ -1245,6 +1246,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
                            , rpcDoRefChanHeadPost = refChanHeadPostAction
                            , rpcDoRefChanPropose = refChanProposeAction
                            , rpcDoRefChanNotify = refChanNotifyAction
+                           , rpcMailboxService = AnyMailboxService @s mailboxWorker
                            }
 
   m1 <- async $ runMessagingUnix rpcmsg
