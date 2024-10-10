@@ -916,7 +916,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
 
   rcw <- async $ liftIO $ runRefChanRelyWorker rce refChanAdapter
 
-  mailboxWorker <- createMailboxProtoWorker @e (AnyStorage s)
+  mailboxWorker <- createMailboxProtoWorker @e penv denv (AnyStorage s)
 
   let onNoBlock (p, h) = do
         already <- liftIO $ Cache.lookup nbcache (p,h) <&> isJust
@@ -1150,7 +1150,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
                     , makeResponse (refChanNotifyProto False refChanAdapter)
                     -- TODO: change-all-to-authorized
                     , makeResponse ((authorized . subscribed (SomeBrains brains)) lwwRefProtoA)
-                    , makeResponse ((authorized . mailboxProto) mailboxWorker)
+                    , makeResponse ((authorized . mailboxProto False) mailboxWorker)
                     ]
 
 
@@ -1247,6 +1247,7 @@ runPeer opts = respawnOnError opts $ runResourceT do
                            , rpcDoRefChanPropose = refChanProposeAction
                            , rpcDoRefChanNotify = refChanNotifyAction
                            , rpcMailboxService = AnyMailboxService @s mailboxWorker
+                           , rpcMailboxAdapter  = AnyMailboxAdapter @s mailboxWorker
                            }
 
   m1 <- async $ runMessagingUnix rpcmsg
