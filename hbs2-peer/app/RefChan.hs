@@ -1015,8 +1015,6 @@ logMergeProcess penv env q = withPeerM penv do
             nref <- makeMerkle 0 pt $ \(_,_,bss) -> do
               void $ putBlock sto bss
 
-            -- TODO: ASAP-emit-refchan-updated-notify
-            --   $workflow: wip
             updateRef sto chanKey nref
             notifyOnRefChanUpdated env chanKey nref
 
