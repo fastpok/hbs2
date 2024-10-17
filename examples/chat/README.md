@@ -10,7 +10,7 @@
 
 3.  Open [localhost:3000](http://localhost:3000/) in your browser.
 
-## Create chat reflog
+## Create chat refchan
 
 1. Create file containing refchan head
 
@@ -33,7 +33,20 @@
    hbs2-cli [hbs2:refchan:create test-refchan-head.txt]
    ```
 
-   This command will print reflog key, save it somwhere, we'll need it later. It will also create reflog key in hbs2-keyman folder.
+   This command will print refchan key, save it somwhere, we'll need it later. It will also create refchan key in hbs2-keyman folder.
+
+3. Make sure that refchan is ready:
+   ```
+   hbs2-peer refchan get <refchan-key>
+   ```
+
+#### NOTE
+
+Command `hbs2-peer refchan get <refchan-key>` and chat app may not work on empty refchans. So you can write some message using CLI.
+
+```shell
+hbs2-peer refchan propose -a <author-key> -f some-file.txt <refchan-key>
+```
 
 ## Create sigil
 
