@@ -108,7 +108,7 @@ receiveLoop conn sessionID = do
         let chat = fromWSActiveChat activeChat
         setActiveChat sessionID chat
         loadChatMessages chat
-        messages <- withDB $ selectChatMessages chat
+        messages <- withDB $ selectChatMessages pageSize Nothing chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
         members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
@@ -116,6 +116,13 @@ receiveLoop conn sessionID = do
         message <- wsMessageToMessage sessionID wsMessage
         withDB $ insertMessage message
         postMessageToRefChan message
+      WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
+        wsSessionsTVar' <- asks wsSessionsTVar
+        wsSessions <- readTVarIO wsSessionsTVar'
+        wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+        activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
+        messages <- withDB $ selectChatMessages wsGetMessagesLimit (Just wsGetMessagesCursor) activeChat
+        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
       WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
@@ -131,7 +138,7 @@ sendLoop conn sessionID = do
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
         MessagesEvent eventChat -> when (eventChat == activeChat) $ do
-          messages <- withDB $ selectChatMessages activeChat
+          messages <- withDB $ selectChatMessages pageSize Nothing activeChat
           liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $

@@ -174,13 +174,13 @@
   padding: var(--pico-spacing);
   flex-grow: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: calc(var(--pico-spacing) * 0.5);
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-.message:first-child {
+.message:last-child {
   margin-top: auto;
 }
 
@@ -214,7 +214,8 @@
   background-color: var(--pico-form-element-background-color);
   border-color: var(--pico-form-element-border-color);
   border-left: none;
-  padding: var(--pico-form-element-spacing-vertical) calc(var(--pico-form-element-spacing-horizontal) * 0.5);
+  padding: var(--pico-form-element-spacing-vertical)
+    calc(var(--pico-form-element-spacing-horizontal) * 0.5);
   display: flex;
   align-items: center;
   color: var(--pico-h1-color);

@@ -13,6 +13,7 @@ withDB action = do
   dbEnv' <- asks dbEnv
   DBPipe.withDB dbEnv' action
 
+-- TODO: create index
 initDBTables :: (MonadReader Env m, MonadUnliftIO m) => m ()
 initDBTables = withDB do
   createMessagesTable
@@ -40,12 +41,24 @@ insertMessage message = do
     |]
     message
 
-selectChatMessages :: (MonadUnliftIO m) => MyRefChan -> DBPipeM m [Message]
-selectChatMessages refChan = do
+selectChatMessages :: (MonadUnliftIO m) => Integer -> Maybe MyHash -> MyRefChan -> DBPipeM m [Message]
+selectChatMessages limit maybeCursor refChan = do
   select @_ @_ @String
     [qc|
       select * from messages
-      where chat_id = ?
-      order by created_at
+      where
+        chat_id = ?
+        and
+        (
+          ? is null
+          or
+          (created_at, hash) < (
+            select created_at, hash
+            from messages
+            where hash = ?
+          )
+        )
+      order by created_at desc, hash desc
+      limit ?
     |]
-    (Only refChan)
+    (refChan, maybeCursor, maybeCursor, limit)

@@ -21,6 +21,7 @@ import HBS2.Prelude
 import Lucid
 import Network.WebSockets (WebSocketsData)
 import Network.WebSockets qualified as WS
+import Text.InterpolatedString.Perl6 (qc)
 import Util.Attributes
 import Util.Text
 import Util.UserNameColor
@@ -71,7 +72,7 @@ instance Pretty (AsBase58 MyEncryptionPublicKey) where
 
 newtype MyHash = MyHash {fromMyHash :: Hash HbSync}
   deriving stock (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable, Pretty)
+  deriving newtype (Hashable, Pretty, FromJSON)
 
 instance ToField MyHash where
   toField x = toField $ show $ pretty x
@@ -101,26 +102,6 @@ instance FromRow Message where
     messageCreatedAt <- field
     pure Message{..}
 
-instance ToJSON Message where
-  toJSON (Message{..}) =
-    object
-      [ "author" .= messageAuthor
-      , "chat" .= messageChat
-      , "body" .= messageBody
-      , "createdAt" .= messageCreatedAt
-      ]
-
-instance ToHtml Message where
-  toHtml Message{..} = div_ [class_ "message"] $ do
-    div_ [class_ "message-header"] $ do
-      let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
-          createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
-      div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
-      div_ $ small_ $ toHtml createdAt
-    div_ [class_ "message-content"] $ do
-      small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines messageBody)
-  toHtmlRaw = toHtml
-
 type WSSessionID = UUID
 
 data WSSession = WSSession
@@ -147,6 +128,7 @@ data WSProtocolClientMessage
   = WSProtocolClientMessageHello WSHello
   | WSProtocolClientMessageActiveChat WSActiveChat
   | WSProtocolClientMessageMessage WSMessage
+  | WSProtocolClientMessageGetMessages WSGetMessages
 
 instance FromJSON WSProtocolClientMessage where
   parseJSON = withObject "WSProtocolClientMessage" $ \v -> do
@@ -155,6 +137,7 @@ instance FromJSON WSProtocolClientMessage where
       "hello" -> WSProtocolClientMessageHello <$> parseJSON (Object v)
       "active-chat" -> WSProtocolClientMessageActiveChat <$> parseJSON (Object v)
       "message" -> WSProtocolClientMessageMessage <$> parseJSON (Object v)
+      "get-messages" -> WSProtocolClientMessageGetMessages <$> parseJSON (Object v)
       _ -> fail $ "Unknown message type: " <> show messageType
 
 instance WebSocketsData WSProtocolClientMessage where
@@ -191,12 +174,70 @@ instance FromJSON WSMessage where
     message <- v .: "message"
     pure $ WSMessage message
 
+data WSGetMessages = WSGetMessages
+  { wsGetMessagesCursor :: MyHash
+  , wsGetMessagesLimit :: Integer
+  }
+
+instance FromJSON WSGetMessages where
+  parseJSON = withObject "WSMessage" $ \v -> do
+    wsGetMessagesCursor <- v .: "cursor"
+    wsGetMessagesLimit <- v .: "limit"
+    pure $ WSGetMessages{..}
+
 newtype WSMessages = WSMessages {fromWSMessages :: [Message]}
-  deriving newtype (ToJSON)
+
+data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
+
+pageSize :: Integer
+pageSize = 20
+
+hxValsScroll :: MyHash -> Text
+hxValsScroll cursor =
+  [qc|
+\{
+  "type": "get-messages",
+  "cursor": "{pretty cursor}",
+  "limit": {show pageSize}
+}
+|]
+
+messageToHtml :: (Monad m) => InfiniteScrollOpts -> Message -> HtmlT m ()
+messageToHtml applyInfiniteScrollAttrs msg@Message{..} =
+  let cursor = MyHash $ hashObject $ serialise msg
+      hxVals = hxValsScroll cursor
+      infiniteScrollAttrs = case applyInfiniteScrollAttrs of
+        ApplyInfiniteScrollAttrs ->
+          [ wsSend_ ""
+          , hxVals_ hxVals
+          , hxTrigger_ "intersect once"
+          , hxSwap_ "afterend"
+          ]
+        DontApplyInfiniteScrollAttrs -> []
+   in div_ ([class_ "message"] <> infiniteScrollAttrs) $ do
+        div_ [class_ "message-header"] $ do
+          let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
+              createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
+          div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
+          div_ $ small_ $ toHtml createdAt
+        div_ [class_ "message-content"] $ do
+          small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines messageBody)
+
+-- Applies first function to all elements except the last one.
+-- Applies second function to the last element.
+mapMLast_ :: (Monad m) => (a -> m b) -> (a -> m b) -> [a] -> m ()
+mapMLast_ _ _ [] = pure ()
+mapMLast_ _ fLast [x] = void $ fLast x
+mapMLast_ fRest fLast (x : xs) = do
+  _ <- fRest x
+  mapMLast_ fRest fLast xs
 
 instance ToHtml WSMessages where
-  toHtml (WSMessages messages) = div_ [id_ "messages", hxSwapOob_ "innerHTML"] do
-    mapM_ toHtml messages
+  toHtml (WSMessages messages) = div_ [id_ "messages", hxSwapOob_ "beforeend"] do
+    mapMLast_
+      (messageToHtml DontApplyInfiniteScrollAttrs)
+      (messageToHtml ApplyInfiniteScrollAttrs)
+      messages
   toHtmlRaw = toHtml
 
 newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}

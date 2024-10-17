@@ -1,16 +1,17 @@
-module Util.Attributes
-  ( ariaLabel_,
-    ariaLive_,
-    hyper_,
-    hxTrigger_,
-    hxVals_,
-    hxParams_,
-    hxDisinherit_,
-    hxSwapOob_,
-    hxExt_,
-    wsConnect_,
-    wsSend_,
-  )
+module Util.Attributes (
+  ariaLabel_,
+  ariaLive_,
+  hyper_,
+  hxTrigger_,
+  hxVals_,
+  hxParams_,
+  hxDisinherit_,
+  hxSwap_,
+  hxSwapOob_,
+  hxExt_,
+  wsConnect_,
+  wsSend_,
+)
 where
 
 import Data.Text (Text)
@@ -36,6 +37,9 @@ hxParams_ = makeAttribute "hx-params"
 
 hxDisinherit_ :: Text -> Attribute
 hxDisinherit_ = makeAttribute "hx-disinherit"
+
+hxSwap_ :: Text -> Attribute
+hxSwap_ = makeAttribute "hx-swap"
 
 hxSwapOob_ :: Text -> Attribute
 hxSwapOob_ = makeAttribute "hx-swap-oob"

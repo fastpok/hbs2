@@ -70,9 +70,11 @@ function handleIncomingWSMessage(message) {
 }
 
 function handleMessages(message) {
-  showNotification(message);
-  const messagesContainer = document.getElementById("messages");
-  scrollToBottom(messagesContainer);
+  // showNotification(message);
+  // const messagesContainer = document.getElementById("messages");
+  // scrollToBottom(messagesContainer);
+
+
   // TODO: scroll down automatically when opening a chat
   //   scroll down automatically when sending a message (receiving new own message)
   //   down scroll down when receivong others messages and not scrolled to bottom
@@ -80,7 +82,7 @@ function handleMessages(message) {
   // }
 }
 
-function handleMembers(message) {}
+function handleMembers(message) { }
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
@@ -96,4 +98,4 @@ function handleOutgoingWSMessage(message) {
   }
 }
 
-function handleMessage(message) {}
+function handleMessage(message) { }
