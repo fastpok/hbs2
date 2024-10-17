@@ -108,14 +108,17 @@ data WSSession = WSSession
   { wsSessionConn :: WS.Connection
   , wsSessionClientSigil :: MySigil
   , wsSessionActiveChat :: Maybe MyRefChan
+  , wsSessionLastMessageHash :: Maybe MyHash
   }
 
 data WSProtocolServerMessage
-  = WSProtocolServerMessageMessages WSMessages
+  = WSProtocolServerMessageOldMessages WSOldMessages
+  | WSProtocolServerMessageNewMessages WSNewMessages
   | WSProtocolServerMessageMembers WSMembers
 
 instance ToHtml WSProtocolServerMessage where
-  toHtml (WSProtocolServerMessageMessages messages) = toHtml messages
+  toHtml (WSProtocolServerMessageOldMessages messages) = toHtml messages
+  toHtml (WSProtocolServerMessageNewMessages messages) = toHtml messages
   toHtml (WSProtocolServerMessageMembers members) = toHtml members
   toHtmlRaw = toHtml
 
@@ -174,6 +177,8 @@ instance FromJSON WSMessage where
     message <- v .: "message"
     pure $ WSMessage message
 
+data CursorDirection = AfterCursor | BeforeCursor
+
 data WSGetMessages = WSGetMessages
   { wsGetMessagesCursor :: MyHash
   , wsGetMessagesLimit :: Integer
@@ -185,7 +190,9 @@ instance FromJSON WSGetMessages where
     wsGetMessagesLimit <- v .: "limit"
     pure $ WSGetMessages{..}
 
-newtype WSMessages = WSMessages {fromWSMessages :: [Message]}
+newtype WSOldMessages = WSOldMessages [Message]
+
+newtype WSNewMessages = WSNewMessages [Message]
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
 
@@ -232,12 +239,29 @@ mapMLast_ fRest fLast (x : xs) = do
   _ <- fRest x
   mapMLast_ fRest fLast xs
 
-instance ToHtml WSMessages where
-  toHtml (WSMessages messages) = div_ [id_ "messages", hxSwapOob_ "beforeend"] do
-    mapMLast_
-      (messageToHtml DontApplyInfiniteScrollAttrs)
-      (messageToHtml ApplyInfiniteScrollAttrs)
-      messages
+instance ToHtml WSOldMessages where
+  toHtml (WSOldMessages messages) = div_
+    [ id_ "messages"
+    , hxSwapOob_ "beforeend"
+    , data_ "message-type" "old-messages"
+    ]
+    do
+      mapMLast_
+        (messageToHtml DontApplyInfiniteScrollAttrs)
+        (messageToHtml ApplyInfiniteScrollAttrs)
+        messages
+  toHtmlRaw = toHtml
+
+instance ToHtml WSNewMessages where
+  toHtml (WSNewMessages messages) = div_
+    [ id_ "messages"
+    , hxSwapOob_ "afterbegin"
+    , data_ "message-type" "new-messages"
+    ]
+    do
+      mapM_
+        (messageToHtml DontApplyInfiniteScrollAttrs)
+        messages
   toHtmlRaw = toHtml
 
 newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}
@@ -262,7 +286,7 @@ data WSMembers = WSMembers
   }
 
 instance ToHtml WSMembers where
-  toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOob_ "innerHTML"] do
+  toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOob_ "innerHTML", data_ "message-type" "members"] do
     p_ "Authors"
     mapM_ toHtml wsMembersAuthors
     p_ [class_ "mt-1"] "Readers"

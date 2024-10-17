@@ -12,19 +12,11 @@ function autoResize(element) {
   }
 }
 
-function isElementScrolledToBottom(element) {
-  return (
-    Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) <=
-    1
-  );
-}
-
 function scrollToBottom(element) {
   element.scrollTop = element.scrollHeight;
 }
 
-function showNotification(message) {
-  // TODO: don't show notifications when opening a chat and when sending a message
+function showNotification(messages) {
   // TODO: show notifications in inactive chats
   // TODO: show chat, author and message content in notification
   Notification.requestPermission().then((result) => {
@@ -54,14 +46,17 @@ function getIncomingWSMessageType(message) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(message, "text/html");
   const messageContainer = doc.body.firstElementChild;
-  return messageContainer.id;
+  return messageContainer.dataset.messageType;
 }
 
 function handleIncomingWSMessage(message) {
   const messageType = getIncomingWSMessageType(message);
   switch (messageType) {
-    case "messages":
-      handleMessages();
+    case "old-messages":
+      handleOldMessages();
+      break;
+    case "new-messages":
+      handleNewMessages();
       break;
     case "members":
       handleMembers();
@@ -69,20 +64,19 @@ function handleIncomingWSMessage(message) {
   }
 }
 
-function handleMessages(message) {
-  // showNotification(message);
+function handleOldMessages(messages) {}
+
+function handleNewMessages(messages) {
+  // TODO: don't show notifications when sending a message
+  showNotification(messages);
+  // TODO: scroll down automatically when sending a message
   // const messagesContainer = document.getElementById("messages");
-  // scrollToBottom(messagesContainer);
-
-
-  // TODO: scroll down automatically when opening a chat
-  //   scroll down automatically when sending a message (receiving new own message)
-  //   down scroll down when receivong others messages and not scrolled to bottom
-  // if (isElementScrolledToBottom(messagesContainer)) {
+  // if (...) {
+  //   scrollToBottom(messagesContainer);
   // }
 }
 
-function handleMembers(message) { }
+function handleMembers(message) {}
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
@@ -98,4 +92,4 @@ function handleOutgoingWSMessage(message) {
   }
 }
 
-function handleMessage(message) { }
+function handleMessage(message) {}

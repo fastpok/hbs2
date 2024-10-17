@@ -41,8 +41,11 @@ insertMessage message = do
     |]
     message
 
-selectChatMessages :: (MonadUnliftIO m) => Integer -> Maybe MyHash -> MyRefChan -> DBPipeM m [Message]
-selectChatMessages limit maybeCursor refChan = do
+selectChatMessages :: (MonadUnliftIO m) => Integer -> Maybe MyHash -> CursorDirection -> MyRefChan -> DBPipeM m [Message]
+selectChatMessages limit maybeCursor cursorDirection refChan = do
+  let comparison :: String = case cursorDirection of
+        AfterCursor -> ">"
+        BeforeCursor -> "<"
   select @_ @_ @String
     [qc|
       select * from messages
@@ -52,7 +55,7 @@ selectChatMessages limit maybeCursor refChan = do
         (
           ? is null
           or
-          (created_at, hash) < (
+          (created_at, hash) {comparison} (
             select created_at, hash
             from messages
             where hash = ?

@@ -12,6 +12,7 @@ import Data.UUID.V4 qualified as UUID
 import Env
 import Error
 import HBS2.Data.Types.SignedBox
+import HBS2.Hash
 import HBS2.KeyMan.Keys.Direct
 import HBS2.Net.Auth.Credentials hiding (encode)
 import HBS2.Net.Auth.Credentials.Sigil
@@ -88,6 +89,7 @@ myWSApp conn = do
               { wsSessionConn = conn
               , wsSessionActiveChat = Nothing
               , wsSessionClientSigil = wsHelloClientSigil wsHello
+              , wsSessionLastMessageHash = Nothing
               }
       wsSessionID <- addWSSession wsSession
       let disconnect = removeWSSession wsSessionID
@@ -108,8 +110,11 @@ receiveLoop conn sessionID = do
         let chat = fromWSActiveChat activeChat
         setActiveChat sessionID chat
         loadChatMessages chat
-        messages <- withDB $ selectChatMessages pageSize Nothing chat
-        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
+        messages <- withDB $ selectChatMessages pageSize Nothing BeforeCursor chat
+        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
+        case messages of
+          [] -> pure ()
+          xs -> setLastMessageHash sessionID $ MyHash $ hashObject $ serialise $ head xs
         members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageMessage wsMessage -> do
@@ -121,8 +126,8 @@ receiveLoop conn sessionID = do
         wsSessions <- readTVarIO wsSessionsTVar'
         wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
         activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
-        messages <- withDB $ selectChatMessages wsGetMessagesLimit (Just wsGetMessagesCursor) activeChat
-        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
+        messages <- withDB $ selectChatMessages wsGetMessagesLimit (Just wsGetMessagesCursor) BeforeCursor activeChat
+        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
       WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
@@ -138,8 +143,11 @@ sendLoop conn sessionID = do
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
         MessagesEvent eventChat -> when (eventChat == activeChat) $ do
-          messages <- withDB $ selectChatMessages pageSize Nothing activeChat
-          liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
+          newMessages <- withDB $ selectChatMessages pageSize (wsSessionLastMessageHash session) AfterCursor activeChat
+          liftIO $ WS.sendTextData conn $ WSProtocolServerMessageNewMessages $ WSNewMessages newMessages
+          case newMessages of
+            [] -> pure ()
+            xs -> setLastMessageHash sessionID $ MyHash $ hashObject $ serialise $ head xs
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
@@ -185,6 +193,19 @@ setActiveChat wsSessionID chat = do
         ( \session ->
             session
               { wsSessionActiveChat = Just chat
+              }
+        )
+        wsSessionID
+
+setLastMessageHash :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyHash -> m ()
+setLastMessageHash wsSessionID lastMessageHash = do
+  wsSessionsTVar' <- asks wsSessionsTVar
+  atomically $
+    modifyTVar wsSessionsTVar' $
+      Map.adjust
+        ( \session ->
+            session
+              { wsSessionLastMessageHash = Just lastMessageHash
               }
         )
         wsSessionID
