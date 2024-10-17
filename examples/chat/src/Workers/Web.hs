@@ -7,6 +7,7 @@ import DB
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
 import Data.Time
+import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Env
 import Error
@@ -17,7 +18,6 @@ import HBS2.Net.Auth.Credentials.Sigil
 import HBS2.OrDie
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
-import HBS2.Prelude (headMay)
 import Monad
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp qualified as Warp
@@ -63,66 +63,77 @@ wsApp env pending = do
     conn
     \connection -> runReaderT (runAppM (myWSApp connection)) env
 
-wsMessageToMessage :: (MonadUnliftIO m) => WSMessage -> m Message
-wsMessageToMessage wsMessage = do
+wsMessageToMessage :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> WSMessage -> m Message
+wsMessageToMessage wsSessionID (WSMessage wsMessage) = do
+  wsSessionsTVar' <- asks wsSessionsTVar
+  wsSessions <- readTVarIO wsSessionsTVar'
+  let wsSession = wsSessions Map.! wsSessionID
   currentTime <- liftIO getCurrentTime
+  activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
   pure $
     Message
-      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsMessageAuthor wsMessage,
-        messageChat = wsMessageChat wsMessage,
-        messageBody = wsMessageBody wsMessage,
+      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession,
+        messageChat = activeChat,
+        messageBody = wsMessage,
         messageCreatedAt = currentTime
       }
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
-  let wsSession =
-        WSSession
-          { wsSessionConn = conn,
-            wsSessionSubscriptions = []
-          }
-  wsSessionID <- addWSSession wsSession
-  let disconnect = removeWSSession wsSessionID
-  flip finally disconnect $ do
-    receiveLoop' <- async (receiveLoop conn wsSessionID)
-    sendLoop' <- async (sendLoop conn wsSessionID)
-    void $ waitAnyCancel [receiveLoop', sendLoop']
+  wsData <- liftIO $ WS.receiveData conn
+  case wsData of
+    WSProtocolHello wsHello -> do
+      let wsSession =
+            WSSession
+              { wsSessionConn = conn,
+                wsSessionActiveChat = Nothing,
+                wsSessionClientSigil = wsHelloClientSigil wsHello
+              }
+      wsSessionID <- addWSSession wsSession
+      let disconnect = removeWSSession wsSessionID
+      flip finally disconnect $ do
+        receiveLoop' <- async (receiveLoop conn wsSessionID)
+        sendLoop' <- async (sendLoop conn wsSessionID)
+        void $ waitAnyCancel [receiveLoop', sendLoop']
+    _ -> do
+      liftIO $ WS.sendTextData conn WSErrorBadHello
+      myWSApp conn
 
 receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 receiveLoop conn sessionID = do
   forever $ do
     wsData <- liftIO $ WS.receiveData conn
     case wsData of
-      WSProtocolSubscribe wsSubscribe -> do
-        let refChan = wsSubscribeRefChan wsSubscribe
-        addSubscription sessionID refChan
-        loadChatMessages refChan
-        messages <- withDB $ selectChatMessages refChan
+      WSProtocolActiveChat activeChat -> do
+        let chat = fromWSActiveChat activeChat
+        setActiveChat sessionID chat
+        loadChatMessages chat
+        messages <- withDB $ selectChatMessages chat
         liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
-        members <- getChatMembersFromRefChan refChan
+        members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolMembers members
       WSProtocolMessage wsMessage -> do
-        message <- wsMessageToMessage wsMessage
+        message <- wsMessageToMessage sessionID wsMessage
         withDB $ insertMessage message
         postMessageToRefChan message
       _ -> liftIO $ WS.sendTextData conn WSErrorBadMessage
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 sendLoop conn sessionID = do
-  wsSessionsTVar <- asks wsSessionsTVar
+  wsSessionsTVar' <- asks wsSessionsTVar
   chatEventsChan' <- asks chatEventsChan
   myChatEventsChan <- atomically $ dupTChan chatEventsChan'
   forever $ do
     chatEvent <- atomically $ readTChan myChatEventsChan
-    wsSessionsTVar' <- readTVarIO wsSessionsTVar
-    let session = wsSessionsTVar' Map.! sessionID
-    case headMay $ wsSessionSubscriptions session of
+    wsSessions <- readTVarIO wsSessionsTVar'
+    session <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+    case wsSessionActiveChat session of
       Nothing -> pure ()
-      Just chat -> case chatEvent of
-        MessagesEvent eventChat -> when (eventChat == chat) $ do
-          messages <- withDB $ selectChatMessages chat
+      Just activeChat -> case chatEvent of
+        MessagesEvent eventChat -> when (eventChat == activeChat) $ do
+          messages <- withDB $ selectChatMessages activeChat
           liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
-        MembersEvent {..} -> when (membersEventRefChan == chat) $ do
+        MembersEvent {..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
               WSProtocolMembers $
@@ -158,14 +169,15 @@ removeWSSession wsSessionID = do
   wsSessionsTVar <- asks wsSessionsTVar
   atomically $ modifyTVar wsSessionsTVar (Map.delete wsSessionID)
 
-addSubscription :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyRefChan -> m ()
-addSubscription wsSessionID refChan = do
-  wsSessionsTVar <- asks wsSessionsTVar
-  atomically $ modifyTVar wsSessionsTVar (Map.adjust addSub wsSessionID)
-  where
-    addSub session =
-      session
-        { wsSessionSubscriptions = [refChan]
-        -- for now we only have 1 active sub
-        -- { wsSessionSubscriptions = refChan : wsSessionSubscriptions session
-        }
+setActiveChat :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyRefChan -> m ()
+setActiveChat wsSessionID chat = do
+  wsSessionsTVar' <- asks wsSessionsTVar
+  atomically $
+    modifyTVar wsSessionsTVar' $
+      Map.adjust
+        ( \session ->
+            session
+              { wsSessionActiveChat = Just chat
+              }
+        )
+        wsSessionID

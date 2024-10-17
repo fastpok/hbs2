@@ -21,6 +21,7 @@ import HBS2.Prelude
 import Lucid
 import Network.WebSockets (WebSocketsData)
 import Network.WebSockets qualified as WS
+import Util.Attributes
 import Util.Text
 import Util.UserNameColor
 
@@ -124,81 +125,73 @@ type WSSessionID = UUID
 
 data WSSession = WSSession
   { wsSessionConn :: WS.Connection,
-    wsSessionSubscriptions :: [MyRefChan]
+    wsSessionClientSigil :: MySigil,
+    wsSessionActiveChat :: Maybe MyRefChan
   }
 
 data WSProtocolMessage
-  = WSProtocolSubscribe WSSubscribe
+  = WSProtocolHello WSHello
+  | WSProtocolActiveChat WSActiveChat
   | WSProtocolMessage WSMessage
   | WSProtocolMessages WSMessages
   | WSProtocolMembers WSMembers
-
-instance ToJSON WSProtocolMessage where
-  toJSON (WSProtocolSubscribe _) = undefined
-  toJSON (WSProtocolMessage _) = undefined
-  toJSON (WSProtocolMessages msg) =
-    object
-      [ "type" .= ("messages" :: Text),
-        "data"
-          .= object
-            [ "html" .= renderText (toHtml msg),
-              "json" .= msg
-            ]
-      ]
-  toJSON (WSProtocolMembers msg) =
-    object
-      [ "type" .= ("members" :: Text),
-        "data" .= renderText (toHtml msg)
-      ]
 
 instance FromJSON WSProtocolMessage where
   parseJSON = withObject "WSProtocolMessage" $ \v -> do
     messageType <- v .: "type" :: Parser Text
     case messageType of
-      "subscribe" -> WSProtocolSubscribe <$> parseJSON (Object v)
+      "hello" -> WSProtocolHello <$> parseJSON (Object v)
+      "active-chat" -> WSProtocolActiveChat <$> parseJSON (Object v)
       "message" -> WSProtocolMessage <$> parseJSON (Object v)
       "messages" -> undefined
       _ -> fail $ "Unknown message type: " <> show messageType
+
+instance ToHtml WSProtocolMessage where
+  toHtml (WSProtocolMessages messages) = toHtml messages
+  toHtml (WSProtocolMembers members) = toHtml members
+  toHtml _ = undefined
+  toHtmlRaw = toHtml
 
 instance WebSocketsData WSProtocolMessage where
   fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolMessage decode error" $ Aeson.decode $ TLE.encodeUtf8 tl
   fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
   fromDataMessage (WS.Binary bl) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
   fromLazyByteString = orError "WSProtocolMessage decode error" . Aeson.decode
-  toLazyByteString = Aeson.encode
+  toLazyByteString = TLE.encodeUtf8 . renderText . toHtml
 
-data WSSubscribe = WSSubscribe
-  { wsSubscribeRefChan :: MyRefChan
+newtype WSHello = WSHello
+  { wsHelloClientSigil :: MySigil
   }
 
-instance FromJSON WSSubscribe where
-  parseJSON = withObject "WSSubscribe" $ \v -> do
-    chat <- v .: "chat"
-    pure $ WSSubscribe {wsSubscribeRefChan = chat}
+instance FromJSON WSHello where
+  parseJSON = withObject "WSHello" $ \v -> do
+    client <- v .: "client"
+    pure $ WSHello {wsHelloClientSigil = client}
 
-data WSMessage = WSMessage
-  { wsMessageChat :: MyRefChan,
-    wsMessageAuthor :: MySigil,
-    wsMessageBody :: Text
+newtype WSActiveChat = WSActiveChat
+  { fromWSActiveChat :: MyRefChan
+  }
+
+instance FromJSON WSActiveChat where
+  parseJSON = withObject "WSActiveChat" $ \v -> do
+    chat <- v .: "chat"
+    pure $ WSActiveChat chat
+
+newtype WSMessage = WSMessage
+  { wsMessage :: Text
   }
 
 instance FromJSON WSMessage where
   parseJSON = withObject "WSMessage" $ \v -> do
-    chat <- v .: "chat"
-    author <- v .: "author"
-    body <- v .: "body"
-    pure $
-      WSMessage
-        { wsMessageChat = chat,
-          wsMessageAuthor = author,
-          wsMessageBody = body
-        }
+    message <- v .: "message"
+    pure $ WSMessage message
 
 newtype WSMessages = WSMessages {fromWSMessages :: [Message]}
   deriving newtype (ToJSON)
 
 instance ToHtml WSMessages where
-  toHtml (WSMessages messages) = mapM_ toHtml messages
+  toHtml (WSMessages messages) = div_ [id_ "messages", hxSwapOob_ "innerHTML"] do
+    mapM_ toHtml messages
   toHtmlRaw = toHtml
 
 newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}
@@ -223,7 +216,7 @@ data WSMembers = WSMembers
   }
 
 instance ToHtml WSMembers where
-  toHtml (WSMembers {..}) = do
+  toHtml (WSMembers {..}) = div_ [id_ "members", hxSwapOob_ "innerHTML"] do
     p_ "Authors"
     mapM_ toHtml wsMembersAuthors
     p_ [class_ "mt-1"] "Readers"
