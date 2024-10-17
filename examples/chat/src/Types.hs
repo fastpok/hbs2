@@ -210,7 +210,7 @@ messageToHtml applyInfiniteScrollAttrs msg@Message{..} =
         ApplyInfiniteScrollAttrs ->
           [ wsSend_ ""
           , hxVals_ hxVals
-          , hxTrigger_ "intersect once"
+          , hxTrigger_ "intersect once delay:200ms"
           , hxSwap_ "afterend"
           ]
         DontApplyInfiniteScrollAttrs -> []
