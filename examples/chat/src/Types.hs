@@ -80,17 +80,17 @@ instance FromField MyHash where
   fromField = fmap (MyHash . fromString @(Hash HbSync)) . fromField @String
 
 data Message = Message
-  { messageAuthor :: MyPublicKey,
-    messageChat :: MyRefChan,
-    messageBody :: Text,
-    messageCreatedAt :: UTCTime
+  { messageAuthor :: MyPublicKey
+  , messageChat :: MyRefChan
+  , messageBody :: Text
+  , messageCreatedAt :: UTCTime
   }
   deriving (Generic)
 
 instance Serialise Message
 
 instance ToRow Message where
-  toRow msg@Message {..} = toRow (MyHash $ hashObject $ serialise msg, messageAuthor, messageChat, messageBody, messageCreatedAt)
+  toRow msg@Message{..} = toRow (MyHash $ hashObject $ serialise msg, messageAuthor, messageChat, messageBody, messageCreatedAt)
 
 instance FromRow Message where
   fromRow = do
@@ -99,19 +99,19 @@ instance FromRow Message where
     messageChat <- field
     messageBody <- field
     messageCreatedAt <- field
-    pure Message {..}
+    pure Message{..}
 
 instance ToJSON Message where
-  toJSON (Message {..}) =
+  toJSON (Message{..}) =
     object
-      [ "author" .= messageAuthor,
-        "chat" .= messageChat,
-        "body" .= messageBody,
-        "createdAt" .= messageCreatedAt
+      [ "author" .= messageAuthor
+      , "chat" .= messageChat
+      , "body" .= messageBody
+      , "createdAt" .= messageCreatedAt
       ]
 
 instance ToHtml Message where
-  toHtml Message {..} = div_ [class_ "message"] $ do
+  toHtml Message{..} = div_ [class_ "message"] $ do
     div_ [class_ "message-header"] $ do
       let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
           createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
@@ -124,40 +124,45 @@ instance ToHtml Message where
 type WSSessionID = UUID
 
 data WSSession = WSSession
-  { wsSessionConn :: WS.Connection,
-    wsSessionClientSigil :: MySigil,
-    wsSessionActiveChat :: Maybe MyRefChan
+  { wsSessionConn :: WS.Connection
+  , wsSessionClientSigil :: MySigil
+  , wsSessionActiveChat :: Maybe MyRefChan
   }
 
-data WSProtocolMessage
-  = WSProtocolHello WSHello
-  | WSProtocolActiveChat WSActiveChat
-  | WSProtocolMessage WSMessage
-  | WSProtocolMessages WSMessages
-  | WSProtocolMembers WSMembers
+data WSProtocolServerMessage
+  = WSProtocolServerMessageMessages WSMessages
+  | WSProtocolServerMessageMembers WSMembers
 
-instance FromJSON WSProtocolMessage where
-  parseJSON = withObject "WSProtocolMessage" $ \v -> do
-    messageType <- v .: "type" :: Parser Text
-    case messageType of
-      "hello" -> WSProtocolHello <$> parseJSON (Object v)
-      "active-chat" -> WSProtocolActiveChat <$> parseJSON (Object v)
-      "message" -> WSProtocolMessage <$> parseJSON (Object v)
-      "messages" -> undefined
-      _ -> fail $ "Unknown message type: " <> show messageType
-
-instance ToHtml WSProtocolMessage where
-  toHtml (WSProtocolMessages messages) = toHtml messages
-  toHtml (WSProtocolMembers members) = toHtml members
-  toHtml _ = undefined
+instance ToHtml WSProtocolServerMessage where
+  toHtml (WSProtocolServerMessageMessages messages) = toHtml messages
+  toHtml (WSProtocolServerMessageMembers members) = toHtml members
   toHtmlRaw = toHtml
 
-instance WebSocketsData WSProtocolMessage where
-  fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolMessage decode error" $ Aeson.decode $ TLE.encodeUtf8 tl
-  fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
-  fromDataMessage (WS.Binary bl) = orError "WSProtocolMessage decode error" $ Aeson.decode bl
-  fromLazyByteString = orError "WSProtocolMessage decode error" . Aeson.decode
+instance WebSocketsData WSProtocolServerMessage where
+  fromDataMessage = undefined
+  fromLazyByteString = undefined
   toLazyByteString = TLE.encodeUtf8 . renderText . toHtml
+
+data WSProtocolClientMessage
+  = WSProtocolClientMessageHello WSHello
+  | WSProtocolClientMessageActiveChat WSActiveChat
+  | WSProtocolClientMessageMessage WSMessage
+
+instance FromJSON WSProtocolClientMessage where
+  parseJSON = withObject "WSProtocolClientMessage" $ \v -> do
+    messageType <- v .: "type" :: Parser Text
+    case messageType of
+      "hello" -> WSProtocolClientMessageHello <$> parseJSON (Object v)
+      "active-chat" -> WSProtocolClientMessageActiveChat <$> parseJSON (Object v)
+      "message" -> WSProtocolClientMessageMessage <$> parseJSON (Object v)
+      _ -> fail $ "Unknown message type: " <> show messageType
+
+instance WebSocketsData WSProtocolClientMessage where
+  fromDataMessage (WS.Text _ (Just tl)) = orError "WSProtocolClientMessage decode error" $ Aeson.decode $ TLE.encodeUtf8 tl
+  fromDataMessage (WS.Text bl Nothing) = orError "WSProtocolClientMessage decode error" $ Aeson.decode bl
+  fromDataMessage (WS.Binary bl) = orError "WSProtocolClientMessage decode error" $ Aeson.decode bl
+  fromLazyByteString = orError "WSProtocolClientMessage decode error" . Aeson.decode
+  toLazyByteString = undefined
 
 newtype WSHello = WSHello
   { wsHelloClientSigil :: MySigil
@@ -166,7 +171,7 @@ newtype WSHello = WSHello
 instance FromJSON WSHello where
   parseJSON = withObject "WSHello" $ \v -> do
     client <- v .: "client"
-    pure $ WSHello {wsHelloClientSigil = client}
+    pure $ WSHello{wsHelloClientSigil = client}
 
 newtype WSActiveChat = WSActiveChat
   { fromWSActiveChat :: MyRefChan
@@ -211,12 +216,12 @@ instance ToHtml ReaderMember where
   toHtmlRaw = toHtml
 
 data WSMembers = WSMembers
-  { wsMembersReaders :: [ReaderMember],
-    wsMembersAuthors :: [AuthorMember]
+  { wsMembersReaders :: [ReaderMember]
+  , wsMembersAuthors :: [AuthorMember]
   }
 
 instance ToHtml WSMembers where
-  toHtml (WSMembers {..}) = div_ [id_ "members", hxSwapOob_ "innerHTML"] do
+  toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOob_ "innerHTML"] do
     p_ "Authors"
     mapM_ toHtml wsMembersAuthors
     p_ [class_ "mt-1"] "Readers"
@@ -227,7 +232,7 @@ instance ToHtml WSMembers where
 data ChatEvent
   = MessagesEvent MyRefChan
   | MembersEvent
-      { membersEventRefChan :: MyRefChan,
-        membersEventAuthors :: [AuthorMember],
-        membersEventReaders :: [ReaderMember]
+      { membersEventRefChan :: MyRefChan
+      , membersEventAuthors :: [AuthorMember]
+      , membersEventReaders :: [ReaderMember]
       }

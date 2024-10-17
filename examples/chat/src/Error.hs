@@ -34,10 +34,12 @@ exceptionHandler = Handler $ \case
 
 data WSError
   = WSErrorBadHello
+  | WSErrorDuplicateHello
   | WSErrorBadMessage
 
 wsErrorText :: WSError -> Text
 wsErrorText WSErrorBadHello = "couldn't parse hello message"
+wsErrorText WSErrorDuplicateHello = "duplicate hello message"
 wsErrorText WSErrorBadMessage = "couldn't parse message"
 
 instance ToJSON WSError where

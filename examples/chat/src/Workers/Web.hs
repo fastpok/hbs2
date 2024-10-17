@@ -44,9 +44,9 @@ makeScottyApp :: (MonadReader Env m, MonadUnliftIO m) => m Wai.Application
 makeScottyApp = do
   env <- ask
   scottyAppT (runIO env) myScottyApp
-  where
-    runIO :: Env -> AppM a -> IO a
-    runIO env m = runReaderT (runAppM m) env
+ where
+  runIO :: Env -> AppM a -> IO a
+  runIO env m = runReaderT (runAppM m) env
 
 myScottyApp :: ScottyT AppM ()
 myScottyApp = do
@@ -67,27 +67,27 @@ wsMessageToMessage :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> WSM
 wsMessageToMessage wsSessionID (WSMessage wsMessage) = do
   wsSessionsTVar' <- asks wsSessionsTVar
   wsSessions <- readTVarIO wsSessionsTVar'
-  let wsSession = wsSessions Map.! wsSessionID
+  wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText wsSessionID) (Map.lookup wsSessionID wsSessions)
   currentTime <- liftIO getCurrentTime
   activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
   pure $
     Message
-      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession,
-        messageChat = activeChat,
-        messageBody = wsMessage,
-        messageCreatedAt = currentTime
+      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession
+      , messageChat = activeChat
+      , messageBody = wsMessage
+      , messageCreatedAt = currentTime
       }
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
   wsData <- liftIO $ WS.receiveData conn
   case wsData of
-    WSProtocolHello wsHello -> do
+    WSProtocolClientMessageHello wsHello -> do
       let wsSession =
             WSSession
-              { wsSessionConn = conn,
-                wsSessionActiveChat = Nothing,
-                wsSessionClientSigil = wsHelloClientSigil wsHello
+              { wsSessionConn = conn
+              , wsSessionActiveChat = Nothing
+              , wsSessionClientSigil = wsHelloClientSigil wsHello
               }
       wsSessionID <- addWSSession wsSession
       let disconnect = removeWSSession wsSessionID
@@ -104,19 +104,19 @@ receiveLoop conn sessionID = do
   forever $ do
     wsData <- liftIO $ WS.receiveData conn
     case wsData of
-      WSProtocolActiveChat activeChat -> do
+      WSProtocolClientMessageActiveChat activeChat -> do
         let chat = fromWSActiveChat activeChat
         setActiveChat sessionID chat
         loadChatMessages chat
         messages <- withDB $ selectChatMessages chat
-        liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
+        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
         members <- getChatMembersFromRefChan chat
-        liftIO $ WS.sendTextData conn $ WSProtocolMembers members
-      WSProtocolMessage wsMessage -> do
+        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
+      WSProtocolClientMessageMessage wsMessage -> do
         message <- wsMessageToMessage sessionID wsMessage
         withDB $ insertMessage message
         postMessageToRefChan message
-      _ -> liftIO $ WS.sendTextData conn WSErrorBadMessage
+      WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 sendLoop conn sessionID = do
@@ -132,14 +132,14 @@ sendLoop conn sessionID = do
       Just activeChat -> case chatEvent of
         MessagesEvent eventChat -> when (eventChat == activeChat) $ do
           messages <- withDB $ selectChatMessages activeChat
-          liftIO $ WS.sendTextData conn $ WSProtocolMessages $ WSMessages messages
-        MembersEvent {..} -> when (membersEventRefChan == activeChat) $ do
+          liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMessages $ WSMessages messages
+        MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
-              WSProtocolMembers $
+              WSProtocolServerMessageMembers $
                 WSMembers
-                  { wsMembersReaders = membersEventReaders,
-                    wsMembersAuthors = membersEventAuthors
+                  { wsMembersReaders = membersEventReaders
+                  , wsMembersAuthors = membersEventAuthors
                   }
 
 postMessageToRefChan :: (MonadReader Env m, MonadUnliftIO m) => Message -> m ()
