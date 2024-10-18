@@ -13,9 +13,11 @@ fixme-attribs assigned workflow :class
 
 fixme-attribs class
 
-fixme-value-set :workflow :new :backlog :wip :test :fixed :done
+fixme-attribs :committer-name :commit-time
 
-fixme-value-set class hardcode performance boilerplate
+fixme-value-set :workflow :new :backlog :wip :test :fixed :done :ready :merged
+
+fixme-value-set class hardcode performance boilerplate ui
 
 ; fixme-value-set cat bug feat refactor
 
@@ -25,6 +27,7 @@ fixme-files **/*.txt docs/devlog.md
 fixme-files **/*.hs
 fixme-exclude **/.**
 fixme-exclude dist-newstyle
+fixme-exclude miscellaneous
 
 fixme-file-comments "*.scm" ";"
 
@@ -47,7 +50,7 @@ fixme-comments ";" "--"
          (align 8  $class)  " "
          (align 12 $assigned)  " "
          (align 20 (trim 20 $committer-name)) " "
-         (trim 50  ($fixme-title)) " "
+         (trim 40  ($fixme-title)) " "
          (nl))
     )
 )
@@ -63,6 +66,9 @@ fixme-comments ";" "--"
 (define (test s) (modify s workflow :test))
 (define (new s) (modify s workflow :new))
 (define (backlog s) (modify s workflow :backlog))
+(define (ready s) (modify s workflow :ready))
+(define (merged s) (modify s workflow :merged))
+(define (assign s who) (modify s :assigned who))
 
 ;; refchan settings
 refchan 3WtddmcE8zzgBAPR7Bu7mKMaVMTN423NNXSPUJp3Hx42

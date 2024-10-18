@@ -25,8 +25,12 @@ import HBS2.Git.DashBoard.Types
 import HBS2.Git.DashBoard.Fixme
 import HBS2.Git.DashBoard.Manifest
 import HBS2.Git.Web.Html.Root
-
+import HBS2.Git.Web.Html.Issue
+import HBS2.Git.Web.Html.Repo
+import HBS2.Git.Web.Html.Fixme
 import HBS2.Peer.CLI.Detect
+
+import DBPipe.SQLite
 
 import Data.Config.Suckless.Script
 
@@ -139,7 +143,6 @@ runDashBoardM m = do
   xdgData <- liftIO $ getXdgDirectory XdgData hbs2_git_dashboard
 
   let dataDir = xdgData
-  let dbFile = xdgData </> "state.db"
 
   -- FIXME: unix-socket-from-config
   soname <- detectRPC `orDie` "hbs2-peer rpc not found"
@@ -154,6 +157,7 @@ runDashBoardM m = do
   setLogging @DEBUG  debugPrefix
   setLogging @WARN   warnPrefix
   setLogging @NOTICE noticePrefix
+
 
   flip runContT pure do
 
@@ -180,6 +184,7 @@ runDashBoardM m = do
 
     void $ ContT $ withAsync $ liftIO $ runReaderT (runServiceClientMulti endpoints) client
 
+
     env <- newDashBoardEnv
                 dataDir
                 peerAPI
@@ -188,10 +193,30 @@ runDashBoardM m = do
                 lwwAPI
                 sto
 
+    lift $ withDashBoardEnv env do
+      mkdir dataDir
+      notice "evolving db"
+      withState evolveDB
+
     void $ ContT $ withAsync do
-      q <- withDashBoardEnv env $ asks _pipeline
-      forever do
-        liftIO (atomically $ readTQueue q) & liftIO . join
+      fix \next -> do
+        dbe' <- readTVarIO (_db env)
+        case dbe' of
+          Just dbe -> do
+            notice $ green "Aquired database!"
+            runPipe dbe
+            forever do
+              pause @'Seconds 30
+
+          Nothing -> do
+            pause @'Seconds 5
+            next
+
+    replicateM_ 2 do
+      ContT $ withAsync do
+        q <- withDashBoardEnv env $ asks _pipeline
+        forever do
+          liftIO (atomically $ readTQueue q) & liftIO . join
 
     lift $ withDashBoardEnv env m
       `finally` do
@@ -249,7 +274,7 @@ runDashboardWeb WebOptions{..} = do
     lwws' <- captureParam @String "lww" <&> fromStringMay @(LWWRefKey 'HBS2Basic)
     flip runContT pure do
       lww <- lwws' & orFall (status status404)
-      TopInfoBlock{..} <- getTopInfoBlock lww
+      TopInfoBlock{..} <- lift $ getTopInfoBlock lww
       lift $ html (LT.fromStrict manifest)
 
   get (routePattern (RepoRefs "lww")) do
@@ -377,18 +402,16 @@ runDashboardWeb WebOptions{..} = do
 
 runScotty :: DashBoardPerks m => DashBoardM m ()
 runScotty  = do
-    pno <- getHttpPortNumber
-    wo <- WebOptions <$> getDevAssets
 
     env <- ask
-
-    notice "evolving db"
-    withState evolveDB
 
     notice "running config"
     conf <- readConfig
 
     run theDict conf
+
+    pno <- getHttpPortNumber
+    wo <- WebOptions <$> getDevAssets
 
     flip runContT pure do
       void $ ContT $ withAsync updateIndexPeriodially
@@ -451,6 +474,9 @@ runRPC = do
     void $ waitAnyCatchCancel [m1,p1]
 
 
+
+  -- pure ()
+
 updateIndexPeriodially :: DashBoardPerks m => DashBoardM m ()
 updateIndexPeriodially = do
 
@@ -461,18 +487,26 @@ updateIndexPeriodially = do
 
   changes <- newTQueueIO
 
+  -- queues <- newTVarIO ( mempty :: HashMap RepoLww (TQueue (IO ()) ) )
+
   flip runContT pure do
 
-    p1 <- ContT $ withAsync $ forever do
-      rs <- atomically $ peekTQueue changes >> flushTQueue changes
-      addJob (withDashBoardEnv env updateIndex)
-      pause @'Seconds 1
+    lift $ addJob (withDashBoardEnv env updateIndex)
+
+    p1 <- ContT $ withAsync $ do
+      pause @'Seconds 30
+      forever do
+        rs <- atomically $ peekTQueue changes >> flushTQueue changes
+        addJob (withDashBoardEnv env updateIndex)
+      -- pause @'Seconds 1
 
     p2 <- pollRepos changes
 
     p3 <- pollFixmies
 
-    void $ waitAnyCatchCancel [p1,p2,p3]
+    p4 <- pollRepoIndex
+
+    void $ waitAnyCatchCancel [p1,p2,p3,p4]
 
   where
 
@@ -488,7 +522,7 @@ updateIndexPeriodially = do
                    <&> fmap (,60)
 
       ContT $ withAsync $ do
-        polling (Polling 1 30) chans $ \(l,r) -> do
+        polling (Polling 10 30) chans $ \(l,r) -> do
           debug $ yellow "POLL FIXME CHAN" <+> pretty (AsBase58 r)
 
           void $ runMaybeT do
@@ -499,13 +533,14 @@ updateIndexPeriodially = do
 
             old <- readTVarIO cached <&> HM.lookup r
 
+            atomically $ modifyTVar cached (HM.insert r new)
+
             when (Just new /= old) $ lift do
               debug $ yellow "fixme refchan changed" <+> "run update" <+> pretty new
               addJob do
                 -- TODO: this-is-not-100-percent-reliable
                 --   $workflow: backlog
                 --   откуда нам вообще знать, что там всё получилось?
-                atomically $ modifyTVar cached (HM.insert r new)
                 void $ try @_ @SomeException (withDashBoardEnv env $ updateFixmeFor l r)
 
 
@@ -517,7 +552,7 @@ updateIndexPeriodially = do
       let rlogs = selectRefLogs <&> fmap (over _1 (coerce @_ @MyRefLogKey)) . fmap (, 60)
 
       ContT $ withAsync $ do
-        polling (Polling 1 30) rlogs $ \r -> do
+        polling (Polling 10 30) rlogs $ \r -> do
 
           debug $ yellow "POLL REFLOG" <+> pretty r
 
@@ -526,7 +561,10 @@ updateIndexPeriodially = do
 
           old <- readTVarIO cached <&> HM.lookup r
 
+
           for_ rv $ \x -> do
+
+            atomically $ modifyTVar cached (HM.insert r x)
 
             when (rv /= old) do
               debug $ yellow "REFLOG UPDATED" <+> pretty r <+> pretty x
@@ -551,8 +589,15 @@ updateIndexPeriodially = do
                 debug $ red "SYNC" <+> pretty cmd
                 void $ runProcess $ shell cmd
 
-                lift $ buildCommitTreeIndex (coerce lww)
+    pollRepoIndex = do
 
+      api <- asks _refLogAPI
+      let rlogs = selectRefLogs <&> fmap (over _1 (coerce @_ @MyRefLogKey)) . fmap (, 600)
+
+      ContT $ withAsync $ do
+        polling (Polling 1 30) rlogs $ \r -> do
+          lww' <- selectLwwByRefLog (RepoRefLog r)
+          for_ lww' $ addRepoIndexJob . coerce
 
 quit :: DashBoardPerks m => m ()
 quit = liftIO exitSuccess
@@ -638,10 +683,12 @@ theDict = do
 
           _ -> throwIO $ BadFormException @C nil
 
+
     developAssetsEntry = do
       entry $ bindMatch "develop-assets" $ nil_ \case
         [StringLike s] -> do
-          pure ()
+          devAssTVar <- lift $ asks _dashBoardDevAssets
+          atomically $ writeTVar devAssTVar (Just s)
 
         _ -> none
 
@@ -665,6 +712,37 @@ theDict = do
     -- TODO: ASAP-hide-debug-functions-from-help
 
     debugEntries = do
+
+      entry $ bindMatch "debug:cache:ignore:on" $ nil_ $ const $ lift do
+        t <- asks _dashBoardIndexIgnoreCaches
+        atomically $ writeTVar t True
+
+      entry $ bindMatch "debug:cache:ignore:off" $ nil_ $ const $ lift do
+        t <- asks _dashBoardIndexIgnoreCaches
+        atomically $ writeTVar t False
+
+      entry $ bindMatch "debug:build-commit-index" $ nil_ $ \case
+        [SignPubKeyLike lw] -> lift do
+          buildCommitTreeIndex (LWWRefKey lw)
+
+        _ -> throwIO $ BadFormException @C nil
+
+
+      entry $ bindMatch "debug:build-single-commit-index" $ nil_ $ \case
+        [SignPubKeyLike lw, StringLike h'] -> lift do
+
+          h <- fromStringMay @GitHash h'
+                  & orThrowUser ("invalid git object hash" <+> pretty h')
+
+          buildSingleCommitTreeIndex (LWWRefKey lw) h
+
+        _ -> throwIO $ BadFormException @C nil
+
+        -- rs <- selectRepoFixme
+        -- for_ rs $ \(r,f) -> do
+        --   liftIO $ print $ pretty r <+> pretty (AsBase58 f)
+
+
       entry $ bindMatch "debug:select-repo-fixme" $ nil_ $ const $ lift do
         rs <- selectRepoFixme
         for_ rs $ \(r,f) -> do

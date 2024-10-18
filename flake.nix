@@ -5,160 +5,170 @@ inputs = {
 
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     # haskell-flake-utils.url = "github:ivanovs-4/haskell-flake-utils";
-    haskell-flake-utils.url = "github:ivanovs-4/haskell-flake-utils/master";
+    flake-utils.url = "github:numtide/flake-utils";
+    haskell-flake-utils = { # we don't use haskell-flake-utils directly, but we override input evrywhere
+        url = "github:ivanovs-4/haskell-flake-utils/master";
+        inputs.flake-utils.follows = "flake-utils";
+    };
     hspup.url = "github:voidlizard/hspup";
     hspup.inputs.nixpkgs.follows = "nixpkgs";
     hspup.inputs.haskell-flake-utils.follows = "haskell-flake-utils";
 
-    suckless-conf.url = "git+https://git.hbs2.net/JAuk1UJzZfbDGKVazSQU5yYQ3NGfk4gVeZzBCduf5TgQ";
-
-    suckless-conf.inputs.nixpkgs.follows = "nixpkgs";
-    suckless-conf.inputs.fuzzy.follows = "fuzzy";
-    suckless-conf.inputs.haskell-flake-utils.follows = "haskell-flake-utils";
-
-    db-pipe.url = "git+https://git.hbs2.net/5xrwbTzzweS9yeJQnrrUY9gQJfhJf84pbyHhF2MMmSft";
-    db-pipe.inputs.nixpkgs.follows = "nixpkgs";
-    db-pipe.inputs.haskell-flake-utils.follows = "haskell-flake-utils";
-
-    lsm.url = "git+https://git.hbs2.net/5BCaH95cWsVKBmWaDNLWQr2umxzzT5kqRRKNTm2J15Ls";
-    lsm.inputs.nixpkgs.follows = "nixpkgs";
-    lsm.inputs.haskell-flake-utils.follows = "haskell-flake-utils";
-
-    # fuzzy.url = "git+file:/home/iv/haskell/p2p/hex-offgrid/fuzzy-parse";  # tmp
-    fuzzy.url = "git+https://git.hbs2.net/GmcLB9gEPT4tbx9eyQiECwsu8oPyEh6qKEpQDtyBWVPA";
-    fuzzy.inputs.nixpkgs.follows = "nixpkgs";
-    fuzzy.inputs.haskell-flake-utils.follows = "haskell-flake-utils";
-
-    saltine = {
-      url = "github:tel/saltine/3d3a54cf46f78b71b4b55653482fb6f4cee6b77d";
-      flake = false;
-    };
-
-    bytestring-mmap = {
-      url = "github:ivanovs-4/bytestring-mmap";
-      flake = false;
-    };
-
 };
 
-outputs = { self, nixpkgs, haskell-flake-utils, ... }@inputs:
-  let
-    packageNames = [
-     "hbs2"
-     "hbs2-peer"
-     "hbs2-core"
-     "hbs2-storage-simple"
-     "hbs2-git"
-     "hbs2-git-dashboard"
-     "hbs2-qblf"
-     "hbs2-keyman"
-     "hbs2-keyman-direct-lib"
-     "hbs2-fixer"
-     "hbs2-cli"
-     "hbs2-sync"
-     "fixme-new"
-    ];
-  in
- haskell-flake-utils.lib.simpleCabalProject2flake {
-   inherit self nixpkgs;
-   systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-   name = "hbs2";
-
-   haskellFlakes = with inputs; [
-     suckless-conf
-     db-pipe
-   ];
-
-   inherit packageNames;
-
-   packageDirs = {
-     "hbs2"                   = "./hbs2";
-     "hbs2-tests"             = "./hbs2-tests";
-     "hbs2-core"              = "./hbs2-core";
-     "hbs2-storage-simple"    = "./hbs2-storage-simple";
-     "hbs2-peer"              = "./hbs2-peer";
-     "hbs2-keyman"            = "./hbs2-keyman/hbs2-keyman";
-     "hbs2-keyman-direct-lib" = "./hbs2-keyman/hbs2-keyman-direct-lib";
-     "hbs2-git"               = "./hbs2-git";
-     "hbs2-git-dashboard"     = "./hbs2-git-dashboard";
-     "hbs2-fixer"             = "./hbs2-fixer";
-     "hbs2-cli"               = "./hbs2-cli";
-     "hbs2-sync"              = "./hbs2-sync";
-     "fixme-new"              = "./fixme-new";
-   };
-
-   hpPreOverrides = {pkgs, ...}: final: prev: ((with pkgs; {
-     saltine = prev.callCabal2nix "saltine" inputs.saltine { inherit (pkgs) libsodium; };
-     scotty = final.callHackage "scotty" "0.21" { };
-     bytestring-mmap = prev.callCabal2nix "bytestring-mmap" inputs.bytestring-mmap {};
-     skylighting-lucid = final.callHackage "skylighting-lucid" "1.0.4" { };
-     # wai-app-file-cgi = final.callHackage "wai-app-file-cgi" "3.1.11" { };
-     # htags = final.callHackage "htags" "1.0.1" { };
-   }) //
-   (with haskell-flake-utils.lib;
-    with pkgs.haskell.lib;
+outputs = { self, nixpkgs, flake-utils, ... }@inputs:
+  flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"]
+  (system:
     let
-      donts = [
-        (jailbreakUnbreak pkgs)
-        # dontBenchmark
+      packageNames =
+        topLevelPackages ++ keymanPackages;
+
+      keymanPackages =
+        [
+        "hbs2-keyman"
+        "hbs2-keyman-direct-lib"
+        ];
+
+      topLevelPackages =
+        [
+        "hbs2"
+        "hbs2-peer"
+        "hbs2-core"
+        "hbs2-storage-simple"
+        "hbs2-git"
+        "hbs2-git-dashboard"
+        "hbs2-qblf"
+        "hbs2-fixer"
+        "hbs2-cli"
+        "hbs2-sync"
+        "fixme-new"
+        ];
+
+      miscellaneous =
+        [
+        "bytestring-mmap"
+        "db-pipe"
+        "fuzzy-parse"
+        "suckless-conf"
+        ];
+
+      pkgs = import nixpkgs {
+          inherit system;
+          overlays = [defaultOverlay];
+        };
+
+      defaultOverlay = final: prev:
+        (prev.lib.composeManyExtensions # no-op
+        [ overlay
+        ]) final prev;
+
+      packagePostOverrides = pkg: with pkgs.haskell.lib.compose; pkgs.lib.pipe pkg [
+        disableExecutableProfiling
+        disableLibraryProfiling
+        dontBenchmark
         dontCoverage
+        dontDistribute
+        dontHaddock
+        dontHyperlinkSource
+        doStrip
+        enableDeadCodeElimination
+        justStaticExecutables
+
         dontCheck
+
+        (overrideCabal (drv: {
+            preBuild = ''
+              export GIT_HASH="${self.rev or self.dirtyRev or "dirty"}"
+            '';
+          }))
       ];
-    in tunePackages pkgs prev {
-       wai-app-file-cgi = donts;
-     }
-   ));
 
-   packagePostOverrides = { pkgs }: with pkgs; with haskell.lib; [
-    disableExecutableProfiling
-    disableLibraryProfiling
-    dontBenchmark
-    dontCoverage
-    dontDistribute
-    dontHaddock
-    dontHyperlinkSource
-    doStrip
-    enableDeadCodeElimination
-    justStaticExecutables
 
-    dontCheck
+    jailbreakUnbreak = pkg:
+        pkgs.haskell.lib.doJailbreak (pkg.overrideAttrs (_: { meta = { }; }));
 
-    (compose.overrideCabal (drv: {
-        preBuild = ''
-          export GIT_HASH="${self.rev or self.dirtyRev or "dirty"}"
-        '';
-      }))
+    makePkgsFromDir = hp: pkgNames: mkPath:
+      pkgs.lib.genAttrs pkgNames (name:
+        hp.callCabal2nix name "${self}/${mkPath name}" {});
 
-   ];
-
-   shell = {pkgs, ...}:
-      pkgs.haskellPackages.shellFor {
-        packages = _: pkgs.lib.attrsets.attrVals packageNames pkgs.haskellPackages;
-        # withHoogle = true;
-        buildInputs = (
-          with pkgs.haskellPackages; ([
-            ghcid
-            cabal-install
-            haskell-language-server
-            hoogle
-            # htags
-            text-icu
-            magic
-            pkgs.icu72
-            pkgs.openssl
-            weeder
-          ])
-          ++
-          [ pkgs.pkg-config
-            inputs.hspup.packages.${pkgs.system}.default
-          ]
-        );
-
-        shellHook = ''
-        export GIT_HASH="${self.rev or self.dirtyRev or "dirty"}"
-        '';
-
+    overlay = final: prev: let pkgs = prev; in
+    {
+      haskellPackages = pkgs.haskellPackages.override {
+        overrides = new: old: with pkgs.haskell.lib;
+          {
+            scotty = new.callHackage "scotty" "0.21" {};
+            skylighting-lucid = new.callHackage "skylighting-lucid" "1.0.4" { };
+            wai-app-file-cgi = dontCoverage (dontCheck (jailbreakUnbreak old.wai-app-file-cgi));
+          }
+          // makePkgsFromDir old topLevelPackages (n: n)
+          // makePkgsFromDir old keymanPackages (name: "hbs2-keyman/${name}")
+          // makePkgsFromDir old miscellaneous (name: "miscellaneous/${name}");
+        };
       };
- };
+
+    makePackages = pkgs:
+      pkgs.lib.mapAttrs
+        (_name: packagePostOverrides) # we can't apply overrides inside our overlay because it will remove linking info
+        (pkgs.lib.getAttrs packageNames pkgs.haskellPackages);
+
+    packagesDynamic = makePackages pkgs;
+    packagesStatic = makePackages pkgs.pkgsStatic;
+    in  {
+    legacyPackages = pkgs;
+    overlays.default = defaultOverlay;
+    homeManagerModules.default = import ./nix/hm-module.nix self;
+
+    packages =
+      packagesDynamic //
+      {
+        default =
+        pkgs.symlinkJoin {
+          name = "hbs2-all";
+          paths = builtins.attrValues packagesDynamic;
+        };
+        static =
+        pkgs.symlinkJoin {
+          name = "hbs2-static";
+          paths = builtins.attrValues packagesStatic;
+        };
+      };
+
+
+    devShells.default = pkgs.haskellPackages.shellFor {
+      packages = _:
+        pkgs.lib.attrVals packageNames pkgs.haskellPackages ++
+        pkgs.lib.attrVals miscellaneous pkgs.haskellPackages;
+      # withHoogle = true;
+      buildInputs = (
+        with pkgs.haskellPackages; [
+          ghc
+          ghcid
+          cabal-install
+          haskell-language-server
+          hoogle
+          # htags
+          text-icu
+          magic
+          pkgs.icu72
+          pkgs.openssl
+          weeder
+        ]
+        ++
+        [ pkgs.pkg-config
+          pkgs.libsodium
+          pkgs.file
+          pkgs.zlib
+          inputs.hspup.packages.${pkgs.system}.default
+        ]
+      );
+
+      shellHook = ''
+      export GIT_HASH="${self.rev or self.dirtyRev or "dirty"}"
+      '';
+
+    };
+  }
+ );
 
 }
+

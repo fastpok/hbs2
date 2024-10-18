@@ -41,6 +41,7 @@ import Data.Either
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Maybe
+import Data.Generics.Product.Fields (field)
 import Data.HashSet qualified as HS
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HM
@@ -49,6 +50,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Text.InterpolatedString.Perl6 (qc)
 import Data.Coerce
 import Data.Word
+import Data.UUID.V4 qualified as UUID
 import Lens.Micro.Platform
 import System.Process.Typed
 import Control.Monad.Trans.Cont
@@ -58,7 +60,10 @@ import Control.Concurrent.STM (flushTQueue)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.Directory (getModificationTime)
 
+
 import System.IO as IO
+import System.Environment (lookupEnv)
+import System.IO.Temp qualified as Temp
 
 import Streaming.Prelude qualified as S
 
@@ -257,6 +262,11 @@ printEnv = do
 
   liftIO $ print $ ("reader" <+> pretty (AsBase58 <$> reader))
 
+scanOneFile :: FixmePerks m => FilePath -> FixmeM m [Fixme]
+scanOneFile fn = do
+  lbs <- liftIO $ LBS.readFile fn
+  scanBlob (Just fn) lbs
+
 scanFiles :: FixmePerks m => FixmeM m [Fixme]
 scanFiles = do
   w <- fixmeWorkDir
@@ -317,6 +327,74 @@ report t q = do
                       & fromRight "render error"
 
         liftIO $ hPutDoc stdout what
+
+
+edit_ :: FixmePerks m
+         => Either (String,String) Fixme
+         -> FixmeM m ()
+
+edit_ what = do
+
+  now <- liftIO $ getPOSIXTime <&> round
+
+  editor <- liftIO $ lookupEnv "EDITOR" >>= orThrowUser "EDITOR not set"
+
+  let txt = case what of
+              Right fx0 -> do
+                let fxm = fx0 & set (field @"fixmeAttr") mempty
+                              & set (field @"fixmeStart") mzero
+                              & set (field @"fixmeEnd") mzero
+                show $ pretty fxm
+
+              Left (me,title) -> [qc|TODO: {title}
+$commit-time:    {pretty now}
+$committer-name: {pretty me}
+
+Issue text...
+|]
+
+  let setKey k fx = case what of
+                      Right w -> fx & set (field @"fixmeKey") (fixmeKey w)
+                      Left{}  -> fx & set (field @"fixmeKey") (fromString p)
+        where
+         p = show $ pretty
+                  $ hashObject @HbSync
+                  $ fromString @LBS8.ByteString
+                  $ show k
+
+  flip runContT pure $ callCC \exit -> do
+   fname <- liftIO $ Temp.writeTempFile "." "fixme-issue" txt
+
+   ContT $ bracket none (const $ rm fname)
+
+   h1 <- liftIO (BS.readFile fname)
+            <&> hashObject @HbSync
+
+   debug $ "hash1" <+> pretty  h1
+
+   void $ runProcess $ shell [qc|{editor} {fname}|]
+
+   s <- liftIO $ BS.readFile fname <&> LBS.fromStrict
+
+   let h2 = hashObject @HbSync s
+
+   fxs <- lift $ scanBlobOpts NoIndents Nothing s
+
+   debug $ "hash before/after" <+> pretty  h1 <+> pretty h2
+
+   when (h1 == h2) $ exit ()
+
+   lift $ withState $ transactional do
+     for fxs $ \f -> do
+       key <- liftIO $ UUID.nextRandom <&> show
+       let norm = f & set (field @"fixmeStart") mzero
+                    & set (field @"fixmeEnd") mzero
+                    & setKey key
+                    & set (field @"fixmeTs") (Just $ fromIntegral now)
+                    & fixmeDerivedFields
+
+       notice $ "fixme" <+> pretty (fixmeKey norm)
+       insertFixme norm
 
 
 import_ :: FixmePerks m => FixmeM m ()
@@ -395,40 +473,49 @@ cat_ hash = do
 
       fx@Fixme{..} <- ContT $ maybe1 fme' (pure ())
 
+      let dict = [ ("$file", mkStr @C (show $ pretty fixmeKey)) ]
+                 <>
+                 [ (mkId k, mkStr @C   v) | (k,v) <- HM.toList fixmeAttr ]
+                 <>
+                 [ (mkId "$before", mkStr @C (FixmeAttrVal $ Text.pack $ show 1))
+                 ] & HM.fromList
+
+
+      let fallText0 = [qc|{show $ pretty fixmeTag} {show $ pretty fixmeTitle}|]
+                       & encodeUtf8
+                       & LBS8.fromStrict
+
+      let fallback = LBS8.unlines $ fallText0 : fmap (LBS8.fromStrict . encodeUtf8 . coerce) fixmePlain
+
+      let fbAction = action (HM.toList dict)
+
       let gh' = HM.lookup "blob" fixmeAttr
 
       -- FIXME: define-fallback-action
-      gh <- ContT $ maybe1 gh' none
+      gh <- ContT $ maybe1 gh' (liftIO (fbAction fallback))
 
       let cmd = [qc|git {gd} cat-file blob {pretty gh}|] :: String
-
-      let start = fromMaybe 0 fixmeStart & fromIntegral  & (\x -> x - before) & max 0
-
-      debug $ red "start"  <+> pretty start
-      debug $ red "before" <+> pretty before
-
-      let bbefore = if start == 0 then before  else before + 1
-      let origLen = maybe  0 fromIntegral fixmeEnd - maybe 0 fromIntegral fixmeStart & max 1
-      let lno   = max 1 $ origLen + after + before
-
-      let dict = [ (mkId k, mkStr @C   v) | (k,v) <- HM.toList fixmeAttr ]
-                 <>
-                 [ (mkId (FixmeAttrName "before"), mkStr @C (FixmeAttrVal $ Text.pack $ show bbefore))
-                 ]
-
-      debug (pretty cmd)
 
       w <- gitRunCommand cmd
               <&> either (const Nothing) Just
 
-      maybe1 w none $ \lbs -> do
+      maybe1 w (liftIO $ fbAction fallback) $ \lbs -> do
+
+        let start = fromMaybe 0 fixmeStart & fromIntegral  & (\x -> x - before) & max 0
+
+        -- FIXME: off-by-one-error
+        let bbefore = if start == 0 then 1 else before + 1
+
+        -- warn $ red "before" <+> pretty before <+> pretty bbefore
+
+        let origLen = maybe  0 fromIntegral fixmeEnd - maybe 0 fromIntegral fixmeStart & max 1
+        let lno   =   max 1 $ origLen + after + before
+        let val = mkStr @C (FixmeAttrVal $ Text.pack $ show bbefore)
+        let ddict = HM.toList (HM.insert "$before" val dict)
         let piece = LBS8.lines lbs & drop start & take lno
-        liftIO $ action  dict (LBS8.unlines piece)
+        liftIO $ action ddict (LBS8.unlines piece)
         exit ()
 
-      let fallback = LBS8.unlines $ fmap (LBS8.fromStrict . encodeUtf8 . coerce) fixmePlain
-
-      liftIO $ action  dict fallback
 
 class HasRefChanExportOpts a where
   refchanExportDry :: a -> Bool

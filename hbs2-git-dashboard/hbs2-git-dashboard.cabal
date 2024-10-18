@@ -114,6 +114,7 @@ library hbs2-git-dashboard-core
       , skylighting-lucid
       , stm
       , streaming
+      , split
       , temporary
       , text
       , time
@@ -142,7 +143,15 @@ library hbs2-git-dashboard-core
       HBS2.Git.DashBoard.State.Index.Peer
       HBS2.Git.DashBoard.Manifest
       HBS2.Git.DashBoard.Fixme
+      HBS2.Git.Web.Html.Types
+      HBS2.Git.Web.Html.Parts.TopInfoBlock
+      HBS2.Git.Web.Html.Parts.Issues.Sidebar
+      HBS2.Git.Web.Html.Parts.Blob
+      HBS2.Git.Web.Html.Markdown
       HBS2.Git.Web.Html.Root
+      HBS2.Git.Web.Html.Issue
+      HBS2.Git.Web.Html.Repo
+      HBS2.Git.Web.Html.Fixme
 
   hs-source-dirs:   hbs2-git-dashboard-core
 
@@ -171,6 +180,7 @@ executable hbs2-git-dashboard
         , hbs2-git-dashboard-core
         , hbs2-peer
         , suckless-conf
+        , db-pipe
 
         , binary
         , bytestring
