@@ -431,7 +431,7 @@ opt n d = n <+> "-" <+> d
 examples :: ManExamples -> MakeDictM c m () -> MakeDictM c m ()
 examples (ManExamples s) = censor (HM.map setExamples )
   where
-    ex = ManExamples (Text.unlines $ Text.strip <$> Text.lines (Text.strip s))
+    ex = ManExamples (Text.unlines $ Text.lines (Text.strip s))
     ex0 = mempty { manExamples = [ex] }
     setExamples (Bind w x) = Bind (Just (maybe ex0 (<>ex0) w)) x
 
