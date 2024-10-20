@@ -93,7 +93,7 @@ WHERE
     |]
     $ examples [qc|
 
-[hbs2:peer:storage:put
+[hbs2:peer:storage:block:put
  [hbs2:mailbox:message:create:multipart
     [kw sender      ghna99Xtm33ncfdUBT3htBUoEyT16wTZGMdm24BQ1kh
         recipient   4e9moTcp9AW13wRYYWg5F8HWooVH1PuQ7zsf5g2JYPWj
