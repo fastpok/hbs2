@@ -121,7 +121,7 @@ instance IsString ManDesc where
 instance Pretty (Man a) where
   pretty e =   "NAME"
              <> line
-             <> indent 8 (pretty (manName e) <> fmtBrief e)
+             <> indent 4 (pretty (manName e) <> fmtBrief e)
              <> line
              <> fmtSynopsis
              <> fmtDescription
@@ -136,14 +136,14 @@ instance Pretty (Man a) where
       Nothing -> mempty
       Just (ManReturns t s) ->
         line <> "RETURN VALUE" <> line
-        <> indent 8 (
+        <> indent 4 (
             if not (Text.null s) then
               (pretty t <> hsep ["","-",""] <> pretty s) <> line
             else pretty t )
 
     fmtDescription = line
       <> "DESCRIPTION" <> line
-      <> indent 8 ( case manDesc e of
+      <> indent 4 ( case manDesc e of
            Nothing -> pretty (manBrief e)
            Just x  -> pretty x)
       <> line
@@ -162,13 +162,13 @@ instance Pretty (Man a) where
       es -> line
         <> "EXAMPLES"
         <> line
-        <> indent 8 ( vcat (fmap pretty es) )
+        <> indent 4 ( vcat (fmap pretty es) )
 
     synEntry (ManSynopsis (ManApply [])) =
-      indent 8 ( parens (pretty (manName e)) ) <> line
+      indent 4 ( parens (pretty (manName e)) ) <> line
 
     synEntry (ManSynopsis (ManApply xs)) = do
-      indent 8 do
+      indent 4 do
         parens (pretty (manName e) <+>
          hsep [ pretty n | ManApplyArg t n <- xs ]  )
          <> line
