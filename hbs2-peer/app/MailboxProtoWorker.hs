@@ -362,9 +362,6 @@ instance ( s ~ Encryption e, e ~ L4Proto
       pure $ Right r
 
   mailboxAcceptStatus me@MailboxProtoWorker{..} ref who s2@MailBoxStatusPayload{..} = do
-    -- TODO: implement-policy-first
-    --   итак, мы не можем двигаться, пока не будет реализована policy.
-
 
     flip runContT pure $ callCC \stop -> do
 
@@ -674,11 +671,8 @@ mailboxProtoWorker readConf me@MailboxProtoWorker{..} = do
 
             -- TODO: ASAP-block-accounting-for-attachment
             for_ (messageParts s) (startDownloadStuff me)
+            either (startDownloadStuff me) dontHandle (messageGK0 s)
 
-            -- read current mailbox
-            -- merge messages into
-            -- write current mailbox
-            -- put attachments to download
 
     mailboxMergeQ = do
       let sto = mpwStorage

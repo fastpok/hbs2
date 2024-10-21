@@ -63,11 +63,29 @@ mailboxEntries :: forall c m . ( IsContext c
                                ) => MakeDictM  c m ()
 mailboxEntries = do
 
-  brief "creates a new object of Mailbox.Message from text"
+  brief "creates a new object of Message from file"
     $ args [arg "string" "filename"]
-    $ desc ""
+    $ desc [qc|
+hbs2:mailbox:message:create:short:file FILENAME
+
+FILENAME is file with format:
+
+field1  VALUE
+field2  VALUE
+<blank>
+message text...
+<EOF>
+
+;;
+
+supported fields:
+
+sender     <SIGIL-HASH>
+recipient  <SIGIL-HASH>
+
+    |]
     $ returns "blob" "message"
-    $ entry $ bindMatch "hbs2:mailbox:message:create:short" $ \case
+    $ entry $ bindMatch "hbs2:mailbox:message:create:short:file" $ \case
         [StringLike fn] -> lift do
           lbs <- liftIO $ LBS8.readFile fn
           mess <- createShortMessageFromByteString lbs
@@ -100,6 +118,14 @@ WHERE
         body        [str:file body.txt]
         part        patch1.patch
     ]]]
+
+NOTE:
+
+Each "part" will be represented as encrypted merkle tree
+with metadata, i.e. it will be created in storage.
+
+So it's a good idea to remove excessive/unrequired trees using
+hbs2 del -r command.
 
 |]
     $ returns "bytes" "message"
