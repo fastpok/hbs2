@@ -70,7 +70,7 @@ peerEntries = do
 
     _ -> throwIO $ BadFormException @c nil
 
-  entry $ bindMatch "hbs2:peer:block:size" $ \case
+  entry $ bindMatch "hbs2:peer:storage:block:size" $ \case
     [HashLike ha] -> do
       flip runContT pure do
         sto <- getStorage
