@@ -6,19 +6,24 @@ import Control.Monad.Reader
 import DB
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
+import Data.Text.Encoding qualified as TE
 import Data.Time
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Env
 import Error
 import HBS2.Data.Types.SignedBox
-import HBS2.Hash
 import HBS2.KeyMan.Keys.Direct
 import HBS2.Net.Auth.Credentials hiding (encode)
 import HBS2.Net.Auth.Credentials.Sigil
 import HBS2.OrDie
+import HBS2.Peer.Proto.Mailbox.Message hiding (createMessage)
+import HBS2.Peer.Proto.Mailbox.Types
 import HBS2.Peer.RPC.API.RefChan
+import HBS2.Peer.RPC.Client.StorageClient
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
+import HBS2.Storage
+import Message
 import Monad
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp qualified as Warp
@@ -64,20 +69,26 @@ wsApp env pending = do
     conn
     \connection -> runReaderT (runAppM (myWSApp connection)) env
 
-wsMessageToMessage :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> WSMessage -> m Message
-wsMessageToMessage wsSessionID (WSMessage wsMessage) = do
+createEncryptedMessage :: (MonadReader Env m, MonadUnliftIO m) => WSMessage -> WSSessionID -> m (EncryptedMessage, UTCTime)
+createEncryptedMessage (WSMessage wsMessage) sessionID = do
   wsSessionsTVar' <- asks wsSessionsTVar
   wsSessions <- readTVarIO wsSessionsTVar'
-  wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText wsSessionID) (Map.lookup wsSessionID wsSessions)
-  currentTime <- liftIO getCurrentTime
+  wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+  messageFlags <- defMessageFlags
+  storageAPI <- asks storageAPI
   activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
-  pure $
-    Message
-      { messageAuthor = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession
-      , messageChat = activeChat
-      , messageBody = wsMessage
-      , messageCreatedAt = currentTime
-      }
+  refChanMembers <- getRefChanMembers activeChat
+  let storage = AnyStorage (StorageClient storageAPI)
+      createMessageServices =
+        CreateMessageServices
+          storage
+          (runKeymanClientRO . loadCredentials)
+          (runKeymanClientRO . loadKeyRingEntry)
+      sender = Right $ fromMySigil $ wsSessionClientSigil wsSession
+      recipients = fromMyEncryptionPublicKey <$> refChanMembersReaders refChanMembers
+      createdAt = getUTCTimeFromMessageTimestamp $ messageCreated messageFlags
+  encryptedMessage <- createMessage createMessageServices messageFlags Nothing sender recipients mempty (TE.encodeUtf8 wsMessage)
+  pure (encryptedMessage, createdAt)
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
@@ -89,7 +100,7 @@ myWSApp conn = do
               { wsSessionConn = conn
               , wsSessionActiveChat = Nothing
               , wsSessionClientSigil = wsHelloClientSigil wsHello
-              , wsSessionLastMessageHash = Nothing
+              , wsSessionLastMessageHashRef = Nothing
               }
       wsSessionID <- addWSSession wsSession
       let disconnect = removeWSSession wsSessionID
@@ -101,6 +112,25 @@ myWSApp conn = do
       liftIO $ WS.sendTextData conn WSErrorBadHello
       myWSApp conn
 
+getDecryptedMessageByMetadata :: (MonadReader Env m, MonadUnliftIO m) => MessageMetadata -> m DecryptedMessage
+getDecryptedMessageByMetadata MessageMetadata{..} = do
+  storageAPI <- asks storageAPI
+  let storage = AnyStorage (StorageClient storageAPI)
+      readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
+  encryptedMessage <-
+    getBlock storage (fromMyHashRef messageMetaHashRef)
+      >>= orThrowUser "message not found"
+      >>= orThrowUser "invalid message format" . deserialiseOrFail
+  (_authorPublicKey, _messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
+  pure $
+    DecryptedMessage
+      { decryptedMessageHashRef = messageMetaHashRef
+      , decryptedMessageAuthor = messageMetaAuthor
+      , decryptedMessageChat = messageMetaChat
+      , decryptedMessageCreatedAt = messageMetaCreatedAt
+      , decryptedMessageBody = TE.decodeUtf8 messageDataBS
+      }
+
 receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 receiveLoop conn sessionID = do
   forever $ do
@@ -109,24 +139,43 @@ receiveLoop conn sessionID = do
       WSProtocolClientMessageActiveChat activeChat -> do
         let chat = fromWSActiveChat activeChat
         setActiveChat sessionID chat
-        loadChatMessages chat
-        messages <- withDB $ selectChatMessages pageSize Nothing BeforeCursor chat
+        syncDBWithRefChan chat
+        messageMeta <- withDB $ selectChatMessageMetadata pageSize Nothing chat
+        messages <- mapM getDecryptedMessageByMetadata messageMeta
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
         case messages of
           [] -> pure ()
-          xs -> setLastMessageHash sessionID $ MyHash $ hashObject $ serialise $ head xs
+          xs -> setLastMessageHashRef sessionID $ decryptedMessageHashRef $ head xs
         members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageMessage wsMessage -> do
-        message <- wsMessageToMessage sessionID wsMessage
-        withDB $ insertMessage message
-        postMessageToRefChan message
+        (encryptedMessage, createdAt) <- createEncryptedMessage wsMessage sessionID
+        storageAPI <- asks storageAPI
+        let storage = AnyStorage (StorageClient storageAPI)
+        encryptedMessageHashRef <-
+          putBlock storage (serialise encryptedMessage)
+            >>= orThrow (ServerError "can't store message") . fmap MyHashRef
+        wsSessionsTVar' <- asks wsSessionsTVar
+        wsSessions <- readTVarIO wsSessionsTVar'
+        wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+        activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
+        let author = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession
+            messageMetadata =
+              MessageMetadata
+                { messageMetaHashRef = encryptedMessageHashRef
+                , messageMetaChat = activeChat
+                , messageMetaAuthor = author
+                , messageMetaCreatedAt = createdAt
+                }
+        withDB $ insertMessageMetadata messageMetadata
+        postHashRefToRefChan author activeChat encryptedMessageHashRef
       WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
         wsSessionsTVar' <- asks wsSessionsTVar
         wsSessions <- readTVarIO wsSessionsTVar'
         wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
         activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
-        messages <- withDB $ selectChatMessages wsGetMessagesLimit (Just wsGetMessagesCursor) BeforeCursor activeChat
+        messageMeta <- withDB $ selectChatMessageMetadata wsGetMessagesLimit (Just $ BeforeCursor wsGetMessagesCursor) activeChat
+        messages <- mapM getDecryptedMessageByMetadata messageMeta
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
       WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
@@ -143,11 +192,12 @@ sendLoop conn sessionID = do
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
         MessagesEvent eventChat -> when (eventChat == activeChat) $ do
-          newMessages <- withDB $ selectChatMessages pageSize (wsSessionLastMessageHash session) AfterCursor activeChat
+          newMessageMeta <- withDB $ selectChatMessageMetadata pageSize (AfterCursor <$> wsSessionLastMessageHashRef session) activeChat
+          newMessages <- mapM getDecryptedMessageByMetadata newMessageMeta
           liftIO $ WS.sendTextData conn $ WSProtocolServerMessageNewMessages $ WSNewMessages newMessages
           case newMessages of
             [] -> pure ()
-            xs -> setLastMessageHash sessionID $ MyHash $ hashObject $ serialise $ head xs
+            xs -> setLastMessageHashRef sessionID $ decryptedMessageHashRef $ head xs
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
@@ -157,14 +207,16 @@ sendLoop conn sessionID = do
                   , wsMembersAuthors = membersEventAuthors
                   }
 
-postMessageToRefChan :: (MonadReader Env m, MonadUnliftIO m) => Message -> m ()
-postMessageToRefChan message = do
-  creds <- liftIO $ runKeymanClient do
-    loadCredentials (messageAuthor message) >>= orThrow (RequestError "can't load credentials")
+postHashRefToRefChan :: (MonadReader Env m, MonadUnliftIO m) => MyPublicKey -> MyRefChan -> MyHashRef -> m ()
+postHashRefToRefChan author refChan hashRef = do
+  creds <-
+    liftIO $
+      runKeymanClientRO $
+        loadCredentials author >>= orThrow (RequestError "can't load credentials")
   -- creds contains message author keys, not peer keys, right?
-  let box = makeSignedBox (_peerSignPk creds) (_peerSignSk creds) (BSL.toStrict $ serialise message)
+  let box = makeSignedBox (_peerSignPk creds) (_peerSignSk creds) (BSL.toStrict $ serialise $ fromMyHashRef hashRef)
   refChanAPI <- asks refChanAPI
-  void $ callService @RpcRefChanPropose refChanAPI (fromMyPublicKey $ messageChat message, box)
+  void $ callService @RpcRefChanPropose refChanAPI (fromMyPublicKey refChan, box)
 
 addWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSession -> m WSSessionID
 addWSSession wsSession = do
@@ -197,15 +249,15 @@ setActiveChat wsSessionID chat = do
         )
         wsSessionID
 
-setLastMessageHash :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyHash -> m ()
-setLastMessageHash wsSessionID lastMessageHash = do
+setLastMessageHashRef :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyHashRef -> m ()
+setLastMessageHashRef wsSessionID lastMessageHashRef = do
   wsSessionsTVar' <- asks wsSessionsTVar
   atomically $
     modifyTVar wsSessionsTVar' $
       Map.adjust
         ( \session ->
             session
-              { wsSessionLastMessageHash = Just lastMessageHash
+              { wsSessionLastMessageHashRef = Just lastMessageHashRef
               }
         )
         wsSessionID

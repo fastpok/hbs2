@@ -58,6 +58,7 @@ common shared-properties
                   , TupleSections
                   , TypeApplications
                   , TypeFamilies
+                  , TypeOperators
                   , ViewPatterns
 
 executable chat
@@ -70,17 +71,18 @@ executable chat
                   , Pages.Login
                   , Components.Head
                   , Components.Icons
-                  , Components.ThemeToggleButton
                   , Components.LogoutButton
-                  , Util.Attributes
-                  , Util.UserNameColor
-                  , Util.Text
+                  , Components.ThemeToggleButton
                   , Config
+                  , DB
                   , Env
+                  , Error
+                  , Message
                   , Monad
                   , Types
-                  , Error
-                  , DB
+                  , Util.Attributes
+                  , Util.Text
+                  , Util.UserNameColor
                   , Workers
                   , Workers.RefChan
                   , Workers.Web

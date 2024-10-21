@@ -17,6 +17,7 @@ import HBS2.Base58
 import HBS2.Hash
 import HBS2.Net.Auth.Credentials
 import HBS2.Net.Auth.Credentials.Sigil
+import HBS2.Peer.Proto.Mailbox.Types
 import HBS2.Prelude
 import Lucid
 import Network.WebSockets (WebSocketsData)
@@ -70,37 +71,50 @@ newtype MyEncryptionPublicKey = MyEncryptionPublicKey {fromMyEncryptionPublicKey
 instance Pretty (AsBase58 MyEncryptionPublicKey) where
   pretty (AsBase58 (MyEncryptionPublicKey k)) = pretty (AsBase58 k)
 
-newtype MyHash = MyHash {fromMyHash :: Hash HbSync}
+newtype MyHashRef = MyHashRef {fromMyHashRef :: Hash HbSync}
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, Pretty, FromJSON)
 
-instance ToField MyHash where
+instance ToField MyHashRef where
   toField x = toField $ show $ pretty x
 
-instance FromField MyHash where
-  fromField = fmap (MyHash . fromString @(Hash HbSync)) . fromField @String
+instance FromField MyHashRef where
+  fromField = fmap (MyHashRef . fromString @(Hash HbSync)) . fromField @String
 
-data Message = Message
-  { messageAuthor :: MyPublicKey
-  , messageChat :: MyRefChan
-  , messageBody :: Text
-  , messageCreatedAt :: UTCTime
+type EncryptedMessage = Message 'HBS2Basic
+
+data DecryptedMessage = DecryptedMessage
+  { decryptedMessageHashRef :: MyHashRef
+  , decryptedMessageAuthor :: MyPublicKey
+  , decryptedMessageChat :: MyRefChan
+  , decryptedMessageBody :: Text
+  , decryptedMessageCreatedAt :: UTCTime
+  }
+
+data MessageMetadata = MessageMetadata
+  { messageMetaHashRef :: MyHashRef
+  , messageMetaChat :: MyRefChan
+  , messageMetaAuthor :: MyPublicKey
+  , messageMetaCreatedAt :: UTCTime
   }
   deriving (Generic)
 
-instance Serialise Message
+instance ToRow MessageMetadata where
+  toRow MessageMetadata{..} =
+    toRow
+      ( messageMetaHashRef
+      , messageMetaChat
+      , messageMetaAuthor
+      , messageMetaCreatedAt
+      )
 
-instance ToRow Message where
-  toRow msg@Message{..} = toRow (MyHash $ hashObject $ serialise msg, messageAuthor, messageChat, messageBody, messageCreatedAt)
-
-instance FromRow Message where
+instance FromRow MessageMetadata where
   fromRow = do
-    _hash :: MyHash <- field
-    messageAuthor <- field
-    messageChat <- field
-    messageBody <- field
-    messageCreatedAt <- field
-    pure Message{..}
+    messageMetaHashRef <- field
+    messageMetaChat <- field
+    messageMetaAuthor <- field
+    messageMetaCreatedAt <- field
+    pure MessageMetadata{..}
 
 type WSSessionID = UUID
 
@@ -108,7 +122,7 @@ data WSSession = WSSession
   { wsSessionConn :: WS.Connection
   , wsSessionClientSigil :: MySigil
   , wsSessionActiveChat :: Maybe MyRefChan
-  , wsSessionLastMessageHash :: Maybe MyHash
+  , wsSessionLastMessageHashRef :: Maybe MyHashRef
   }
 
 data WSProtocolServerMessage
@@ -177,10 +191,14 @@ instance FromJSON WSMessage where
     message <- v .: "message"
     pure $ WSMessage message
 
-data CursorDirection = AfterCursor | BeforeCursor
+data Cursor = AfterCursor MyHashRef | BeforeCursor MyHashRef
+
+instance ToField Cursor where
+  toField (AfterCursor h) = toField h
+  toField (BeforeCursor h) = toField h
 
 data WSGetMessages = WSGetMessages
-  { wsGetMessagesCursor :: MyHash
+  { wsGetMessagesCursor :: MyHashRef
   , wsGetMessagesLimit :: Integer
   }
 
@@ -190,16 +208,16 @@ instance FromJSON WSGetMessages where
     wsGetMessagesLimit <- v .: "limit"
     pure $ WSGetMessages{..}
 
-newtype WSOldMessages = WSOldMessages [Message]
+newtype WSOldMessages = WSOldMessages [DecryptedMessage]
 
-newtype WSNewMessages = WSNewMessages [Message]
+newtype WSNewMessages = WSNewMessages [DecryptedMessage]
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
 
 pageSize :: Integer
 pageSize = 20
 
-hxValsScroll :: MyHash -> Text
+hxValsScroll :: MyHashRef -> Text
 hxValsScroll cursor =
   [qc|
 \{
@@ -209,9 +227,9 @@ hxValsScroll cursor =
 }
 |]
 
-messageToHtml :: (Monad m) => InfiniteScrollOpts -> Message -> HtmlT m ()
-messageToHtml applyInfiniteScrollAttrs msg@Message{..} =
-  let cursor = MyHash $ hashObject $ serialise msg
+messageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
+messageToHtml applyInfiniteScrollAttrs DecryptedMessage{..} =
+  let cursor = decryptedMessageHashRef
       hxVals = hxValsScroll cursor
       infiniteScrollAttrs = case applyInfiniteScrollAttrs of
         ApplyInfiniteScrollAttrs ->
@@ -223,12 +241,12 @@ messageToHtml applyInfiniteScrollAttrs msg@Message{..} =
         DontApplyInfiniteScrollAttrs -> []
    in div_ ([class_ "message"] <> infiniteScrollAttrs) $ do
         div_ [class_ "message-header"] $ do
-          let author = T.pack $ show $ pretty $ AsBase58 messageAuthor
-              createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" messageCreatedAt
+          let author = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthor
+              createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" decryptedMessageCreatedAt
           div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
           div_ $ small_ $ toHtml createdAt
         div_ [class_ "message-content"] $ do
-          small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines messageBody)
+          small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines decryptedMessageBody)
 
 -- Applies first function to all elements except the last one.
 -- Applies second function to the last element.
@@ -263,6 +281,11 @@ instance ToHtml WSNewMessages where
         (messageToHtml DontApplyInfiniteScrollAttrs)
         messages
   toHtmlRaw = toHtml
+
+data RefChanMembers = RefChanMembers
+  { refChanMembersReaders :: [MyEncryptionPublicKey]
+  , refChanMembersAuthors :: [MyPublicKey]
+  }
 
 newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}
 
