@@ -18,6 +18,7 @@ module HBS2.Peer.Proto.Mailbox.Types
   , MessageContent(..)
   , MessageCompression(..)
   , MessageFlags(..)
+  , MessageTimestamp(..)
   , MessageTTL(..)
   , DeleteMessagesPayload(..)
   , SetPolicyPayload(..)
