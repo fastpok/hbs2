@@ -66,9 +66,7 @@ createMessage :: forall s m . (MonadUnliftIO m , s ~ HBS2Basic)
               -> [([(Text, Text)], m LBS.ByteString)] -- ^ message parts
               -> ByteString                  -- ^ payload
               -> m (Message s)
-createMessage CreateMessageServices{..} _ gks sender' rcpts' parts bs = do
-  -- TODO: support-flags
-  flags <- defMessageFlags
+createMessage CreateMessageServices{..} flags gks sender' rcpts' parts bs = do
 
   pips <- getKeys
 
