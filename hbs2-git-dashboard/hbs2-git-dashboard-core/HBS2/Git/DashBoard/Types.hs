@@ -22,6 +22,7 @@ import System.FilePath
 import Data.Word
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HM
+import Data.Text qualified as Text
 
 type MyRefChan    = RefChanId L4Proto
 type MyRefLogKey  = RefLogKey 'HBS2Basic
