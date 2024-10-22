@@ -1,0 +1,253 @@
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.mt-1 {
+  margin-top: var(--pico-spacing);
+}
+
+.h-screen {
+  height: 100vh;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.h-full {
+  height: 100%;
+}
+
+.flex {
+  display: flex;
+}
+
+.grow {
+  flex-grow: 1;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+
+.header-color {
+  color: var(--pico-h1-color);
+}
+
+.wrapper {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 4fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "sidebar-header content-header members-header"
+    "sidebar        content        members";
+  gap: 1px;
+  background-color: var(--pico-muted-border-color);
+}
+
+.wrapper-item {
+  background-color: var(--pico-background-color);
+}
+
+.sidebar-header {
+  padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
+  display: flex;
+  align-items: center;
+  background-color: var(--pico-code-background-color);
+}
+
+.sidebar {
+  padding: var(--pico-spacing);
+  grid-area: sidebar;
+  background-color: var(--pico-code-background-color);
+}
+
+.sidebar p {
+  margin-bottom: calc(var(--pico-spacing) * 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.chat-button {
+  border: none;
+  padding: calc(var(--pico-spacing) * 0.5);
+  box-shadow: none;
+  color: var(--pico-code-kbd-background-color);
+  text-align: left;
+}
+
+.chat-button:is(:hover) {
+  color: var(--pico-contrast-hover);
+  background-color: var(--pico-contrast-focus);
+}
+
+.chat-button.active {
+  color: var(--pico-contrast-hover);
+  background-color: var(--pico-contrast-focus);
+}
+
+.content-header {
+  padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--pico-spacing);
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.header-button {
+  border: none;
+  padding: calc(var(--pico-spacing) * 0.5);
+  box-shadow: none;
+  color: var(--pico-h1-color);
+  display: flex;
+  align-items: center;
+}
+
+.header-button:is(:hover, :active, :focus) {
+  color: var(--pico-contrast-hover);
+}
+
+.icon-tabler-moon {
+  display: none;
+}
+
+.icon-tabler-sun {
+  display: inline;
+}
+
+[data-theme="dark"] .icon-tabler-moon {
+  display: inline;
+}
+
+[data-theme="dark"] .icon-tabler-sun {
+  display: none;
+}
+
+.content {
+  grid-area: content;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+#chat-placeholder {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#chat-placeholder.hidden {
+  display: none;
+}
+
+#chat {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+#chat.hidden {
+  display: none;
+}
+
+.messages {
+  padding: var(--pico-spacing);
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: calc(var(--pico-spacing) * 0.5);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.message:last-child {
+  margin-top: auto;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.message-input-wrapper {
+  padding: var(--pico-spacing);
+}
+
+.message-input-wrapper fieldset {
+  box-shadow: none;
+}
+
+.message-input {
+  resize: none;
+}
+
+.message-input:is(:active, :focus) {
+  box-shadow: none;
+  background-color: var(--pico-form-element-background-color);
+  /* removes strange border between textarea and button  */
+  z-index: 0;
+  border-color: var(--pico-form-element-border-color);
+}
+
+.send-message {
+  background-color: var(--pico-form-element-background-color);
+  border-color: var(--pico-form-element-border-color);
+  border-left: none;
+  padding: var(--pico-form-element-spacing-vertical)
+    calc(var(--pico-form-element-spacing-horizontal) * 0.5);
+  display: flex;
+  align-items: center;
+  color: var(--pico-h1-color);
+}
+
+.send-message:is(:hover, :active, :focus) {
+  color: var(--pico-contrast-hover);
+}
+
+.send-message svg {
+  width: 1.25rem;
+}
+
+.members-header {
+  padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
+  display: flex;
+  align-items: center;
+  background-color: var(--pico-code-background-color);
+}
+
+.members {
+  padding: var(--pico-spacing);
+  background-color: var(--pico-code-background-color);
+}
+
+.members p {
+  margin-bottom: calc(var(--pico-spacing) * 0.5);
+}
+
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pico-spacing);
+}
