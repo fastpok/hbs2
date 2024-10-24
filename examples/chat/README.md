@@ -65,3 +65,13 @@ or
 ```shell
 hbs2 sigil create -k /path-to-keyring.key <encryption-key-from-keyring> > sigil.txt
 ```
+
+## Update refchan head
+
+Edit refchan head file or create a new one.
+
+### NOTE: don't forget to increase version.
+
+```shell
+hbs2-cli hbs2:refchan:head:update <refchan-key> new-refchan-head.txt
+```
