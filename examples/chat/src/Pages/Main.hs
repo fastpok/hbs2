@@ -4,10 +4,10 @@ import Components.Head
 import Components.Icons
 import Components.LogoutButton
 import Components.ThemeToggleButton
+import Components.WSConnectionStatus
 import Config
 import Control.Monad
 import Control.Monad.Reader
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Env
 import HBS2.Base58
@@ -31,16 +31,18 @@ mainPage = do
 
 htmlBody :: [MyRefChan] -> Html ()
 htmlBody refChans' = body_
-  [ class_ "h-screen",
-    hxExt_ "ws",
-    wsConnect_ "/",
-    wsSend_ "",
-    hxTrigger_ "htmx:wsOpen",
-    hxVals_ "js:{\"type\": \"hello\", \"client\": getUserSigil()}",
-    -- hxDisinherit_ doesn't seem to work
+  [ class_ "h-screen"
+  , hxExt_ "ws"
+  , wsConnect_ "/"
+  , wsSend_ ""
+  , hxTrigger_ "htmx:wsOpen"
+  , hxVals_ "js:{\"type\": \"hello\", \"client\": getUserSigil()}"
+  , -- hxDisinherit_ doesn't seem to work
     -- https://github.com/bigskysoftware/htmx/issues/1119
-    hxDisinherit_ "hx-vals",
-    handleWSMessages
+    hxDisinherit_ "hx-vals"
+  , handleWSMessages
+  , handleWSClose
+  , handleWSOpen
   ]
   $ do
     initScript
@@ -53,15 +55,16 @@ htmlBody refChans' = body_
             let refChanText = Text.pack $ show $ pretty $ AsBase58 refChan
                 refChanShortenedText = shorten 8 refChanText
              in button_
-                  [ class_ "outline chat-button",
-                    wsSend_ "",
-                    hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanText <> "\"}",
-                    handleChatSelect refChanText
+                  [ class_ "outline chat-button"
+                  , wsSend_ ""
+                  , hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanText <> "\"}"
+                  , handleChatSelect
                   ]
                   $ toHtml refChanShortenedText
       div_ [class_ "content-header wrapper-item header-color"] $ do
         div_ [id_ "chat-name"] ""
-        div_ [class_ "header-buttons"] $ do
+        div_ [class_ "header-right"] $ do
+          wsConnectionStatus
           themeToggleButton
           logoutButton
 
@@ -74,14 +77,14 @@ htmlBody refChans' = body_
               fieldset_ [role_ "group", class_ "mb-0"] $
                 do
                   textarea_
-                    [ class_ "message-input",
-                      id_ "message-input",
-                      name_ "message",
-                      placeholder_ "Message",
-                      ariaLabel_ "Message",
-                      required_ "",
-                      rows_ "1",
-                      handleMessageInput
+                    [ class_ "message-input"
+                    , id_ "message-input"
+                    , name_ "message"
+                    , placeholder_ "Message"
+                    , ariaLabel_ "Message"
+                    , required_ ""
+                    , rows_ "1"
+                    , handleMessageInput
                     ]
                     ""
                   button_
@@ -101,14 +104,13 @@ init
   end
 |]
 
-handleChatSelect :: Text -> Attribute
-handleChatSelect refChanText =
+handleChatSelect :: Attribute
+handleChatSelect =
   hyper_
     [qc|
 on click
   set #messages.innerHTML to ''
   set #members.innerHTML to ''
-  set global chat to '{refChanText}'
   remove .active from .chat-button
   add .active to me
   add .hidden to #chat-placeholder
@@ -125,6 +127,32 @@ on htmx:wsAfterMessage
 
 on htmx:wsAfterSend
   call handleOutgoingWSMessage(event.detail.message)
+|]
+
+handleWSClose :: Attribute
+handleWSClose =
+  hyper_
+    [qc|
+on htmx:wsClose or htmx:wsError
+  set #messages.innerHTML to ''
+  set #members.innerHTML to ''
+  remove .active from .chat-button
+  add @disabled to .chat-button
+  add .hidden to #chat
+  remove .hidden from #chat-placeholder
+  set #chat-name.innerText to ''
+  set #ws-connection-status-text.innerText to 'offline'
+  add .offline to #ws-connection-status
+|]
+
+handleWSOpen :: Attribute
+handleWSOpen =
+  hyper_
+    [qc|
+on htmx:wsOpen
+  set #ws-connection-status-text.innerText to 'online'
+  remove .offline from #ws-connection-status
+  remove @disabled from .chat-button
 |]
 
 autoresizeMessageInput :: String

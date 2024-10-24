@@ -4,7 +4,7 @@ import Data.Text (Text)
 import Lucid
 import Text.InterpolatedString.Perl6 (qc)
 
-data IconType = PaperAirplane | Sun | Moon | Logout
+data IconType = PaperAirplane | Sun | Moon | Logout | Circle
 
 getIconSvg :: IconType -> Text
 getIconSvg PaperAirplane =
@@ -23,5 +23,10 @@ getIconSvg Logout =
   [qc|
 <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-logout"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M9 12h12l-3 -3" /><path d="M18 15l3 -3" /></svg>
 |]
+getIconSvg Circle =
+  [qc|
+<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="currentColor"  class="icon icon-tabler icons-tabler-filled icon-tabler-circle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 3.34a10 10 0 1 1 -4.995 8.984l-.005 -.324l.005 -.324a10 10 0 0 1 4.995 -8.336z" /></svg>
+|]
+
 makeIcon :: IconType -> Html ()
 makeIcon iconType = toHtmlRaw $ getIconSvg iconType
