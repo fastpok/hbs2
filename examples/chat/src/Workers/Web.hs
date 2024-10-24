@@ -118,10 +118,7 @@ getDecryptedMessageByMetadata MessageMetadata{..} = do
   storageAPI <- asks storageAPI
   let storage = AnyStorage (StorageClient storageAPI)
       readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
-  encryptedMessage <-
-    getBlock storage (fromMyHashRef messageMetaHashRef)
-      >>= orThrowUser "message not found"
-      >>= orThrowUser "invalid message format" . deserialiseOrFail
+  encryptedMessage <- getMessageWait storage messageMetaHashRef
   (_authorPublicKey, _messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
   pure $
     DecryptedMessage
