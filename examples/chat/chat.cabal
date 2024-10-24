@@ -73,6 +73,7 @@ executable chat
                   , Components.Icons
                   , Components.LogoutButton
                   , Components.ThemeToggleButton
+                  , Components.WSConnectionStatus
                   , Config
                   , DB
                   , Env

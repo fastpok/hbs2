@@ -36,7 +36,7 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
   div_ [class_ "container grow flex flex-col"] $ do
     div_ [class_ "content-header header-color"] $ do
       div_ "hbs2 chat"
-      div_ [class_ "header-buttons"] $ do
+      div_ [class_ "header-right"] $ do
         themeToggleButton
     div_ [class_ "grow login-wrapper"] $ do
       div_ $ do
