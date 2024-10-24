@@ -100,13 +100,8 @@ getAllChatMessagesFromRefChan refChan = do
             case deserialiseOrFail $ BSL.fromStrict bs of
               Left _ -> pure ()
               Right (AnnotatedHashRef _ (HashRef msgHashRef)) -> do
-                encryptedMessage <-
-                  getBlock storage msgHashRef
-                    >>= orThrowUser "message not found"
-                      <&> deserialiseOrFail
-                    >>= orThrowUser "invalid message format"
-                lift $
-                  S.yield (MyHashRef msgHashRef, encryptedMessage)
+                encryptedMessage <- liftIO $ getMessageWait storage (MyHashRef msgHashRef)
+                lift $ S.yield (MyHashRef msgHashRef, encryptedMessage)
 
 readRefChanHead :: (MonadUnliftIO m, MonadReader Env m) => HashRef -> m (Maybe (RefChanHeadBlock L4Proto))
 readRefChanHead refChanHeadHashRef = do
