@@ -8,6 +8,7 @@ import Components.WSConnectionStatus
 import Config
 import Control.Monad
 import Control.Monad.Reader
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Env
 import HBS2.Base58
@@ -48,19 +49,26 @@ htmlBody refChans' = body_
     initScript
     div_ [class_ "wrapper"] $ do
       div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
-      div_ [class_ "sidebar wrapper-item chat-buttons"] $ do
+      div_ [class_ "sidebar wrapper-item chats"] $ do
         case refChans' of
           [] -> p_ $ small_ "There are no chats available"
-          someRefChans -> forM_ someRefChans $ \namedRefChan ->
+          someRefChans -> forM_ someRefChans $ \namedRefChan -> div_ [class_ "chat-item"] $ do
             let refChanKeyText = Text.pack $ show $ pretty $ AsBase58 $ namedRefChanKey namedRefChan
-             in button_
-                  [ class_ "outline chat-button"
-                  , wsSend_ ""
-                  , hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanKeyText <> "\"}"
-                  , handleChatSelect
-                  ]
-                  $ toHtml
-                  $ namedRefChanName namedRefChan
+            button_
+              [ class_ "outline chat-button"
+              , wsSend_ ""
+              , hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanKeyText <> "\"}"
+              , handleChatSelect
+              ]
+              $ toHtml
+              $ namedRefChanName namedRefChan
+            let copyTooltipText = "Copy chat ID"
+            button_
+              [ class_ "outline secondary copy-chat-id-button"
+              , data_ "tooltip" copyTooltipText
+              , onClickCopy copyTooltipText refChanKeyText
+              ]
+              $ makeIcon Copy
       div_ [class_ "content-header wrapper-item header-color"] $ do
         div_ [id_ "chat-name"] ""
         div_ [class_ "header-right"] $ do
@@ -116,6 +124,18 @@ on click
   add .hidden to #chat-placeholder
   remove .hidden from #chat
   set #chat-name.innerText to my.innerText
+|]
+
+onClickCopy :: Text -> Text -> Attribute
+onClickCopy tooltip s =
+  hyper_
+    [qc|
+on click writeText('{s}') into the navigator's clipboard
+  set my innerHTML to '{getIconSvg CopyCheck}'
+  set @data-tooltip to 'Copied!'
+  wait 2s
+  set my innerHTML to '{getIconSvg Copy}'
+  set @data-tooltip to '{tooltip}'
 |]
 
 handleWSMessages :: Attribute
