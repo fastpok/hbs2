@@ -74,10 +74,17 @@
   text-overflow: ellipsis;
 }
 
-.chat-buttons {
+.chats {
   display: flex;
   flex-direction: column;
   gap: calc(var(--pico-spacing) * 0.5);
+}
+
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--pico-spacing) * 0.5);
+  flex-wrap: nowrap;
 }
 
 .chat-button {
@@ -86,6 +93,10 @@
   box-shadow: none;
   color: var(--pico-code-kbd-background-color);
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
 }
 
 .chat-button:is(:hover) {
@@ -96,6 +107,14 @@
 .chat-button.active {
   color: var(--pico-contrast-hover);
   background-color: var(--pico-contrast-focus);
+}
+
+.copy-chat-id-button {
+  display: flex;
+  align-items: center;
+  border: none;
+  padding: calc(var(--pico-spacing) * 0.5);
+  box-shadow: none;
 }
 
 .content-header {
@@ -193,8 +212,7 @@
   display: flex;
   flex-direction: column-reverse;
   gap: calc(var(--pico-spacing) * 0.5);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
 }
 
 .message:last-child {
