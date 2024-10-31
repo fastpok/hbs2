@@ -64,6 +64,11 @@ instance ToJSON MyPublicKey where
 
 type MyRefChan = MyPublicKey
 
+data NamedRefChan = NamedRefChan
+  { namedRefChanKey :: MyRefChan
+  , namedRefChanName :: Text
+  }
+
 newtype MyEncryptionPublicKey = MyEncryptionPublicKey {fromMyEncryptionPublicKey :: PubKey 'Encrypt 'HBS2Basic}
   deriving (Eq, Generic)
   deriving newtype (Serialise, FromStringMaybe)

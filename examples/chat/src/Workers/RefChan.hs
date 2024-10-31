@@ -35,27 +35,33 @@ import UnliftIO
 refChanWorker :: (MonadUnliftIO m, MonadReader Env m) => m ()
 refChanWorker = do
   refChans' <- asks (refChans . config)
-  chatEventsChan' <- asks chatEventsChan
-  sink <- asks refChanNotifySink
-  notifyWorkers <- forM refChans' \refChan -> async do
-    runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChan) $ \case
-      RefChanUpdated _ _ -> do
-        syncDBWithRefChan refChan
-        atomically $ writeTChan chatEventsChan' $ MessagesEvent refChan
-      RefChanHeadUpdated _ _ newRefChanHeadHashRef -> do
-        refChanHead <- readRefChanHead newRefChanHeadHashRef >>= orThrow (ServerError "can't request refchan head")
-        let readers = HS.toList $ view refChanHeadReaders refChanHead
-            authors = HS.toList $ view refChanHeadAuthors refChanHead
-        atomically $
-          writeTChan chatEventsChan' $
-            MembersEvent
-              { membersEventRefChan = refChan
-              , membersEventAuthors = AuthorMember . MyPublicKey <$> authors
-              , membersEventReaders = ReaderMember . MyEncryptionPublicKey <$> readers
-              }
-        pure ()
-      _ -> pure ()
-  void $ waitAnyCancel notifyWorkers
+  case refChans' of
+    [] -> do
+      liftIO $ putStrLn "No refchans found in the config"
+      pure ()
+    someRefChans -> do
+      chatEventsChan' <- asks chatEventsChan
+      sink <- asks refChanNotifySink
+      notifyWorkers <- forM someRefChans \refChan -> async do
+        let refChanKey = namedRefChanKey refChan
+        runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChanKey) $ \case
+          RefChanUpdated _ _ -> do
+            syncDBWithRefChan refChanKey
+            atomically $ writeTChan chatEventsChan' $ MessagesEvent refChanKey
+          RefChanHeadUpdated _ _ newRefChanHeadHashRef -> do
+            refChanHead <- readRefChanHead newRefChanHeadHashRef >>= orThrow (ServerError "can't request refchan head")
+            let readers = HS.toList $ view refChanHeadReaders refChanHead
+                authors = HS.toList $ view refChanHeadAuthors refChanHead
+            atomically $
+              writeTChan chatEventsChan' $
+                MembersEvent
+                  { membersEventRefChan = refChanKey
+                  , membersEventAuthors = AuthorMember . MyPublicKey <$> authors
+                  , membersEventReaders = ReaderMember . MyEncryptionPublicKey <$> readers
+                  }
+            pure ()
+          _ -> pure ()
+      void $ waitAnyCancel notifyWorkers
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
