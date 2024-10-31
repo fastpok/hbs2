@@ -15,8 +15,8 @@ import Lucid
 import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
+import Types
 import Util.Attributes
-import Util.Text
 import Web.Scotty.Trans
 
 mainPage :: ActionT AppM ()
@@ -29,7 +29,7 @@ mainPage = do
       htmlHead
       htmlBody refChans'
 
-htmlBody :: [MyRefChan] -> Html ()
+htmlBody :: [NamedRefChan] -> Html ()
 htmlBody refChans' = body_
   [ class_ "h-screen"
   , hxExt_ "ws"
@@ -51,16 +51,16 @@ htmlBody refChans' = body_
       div_ [class_ "sidebar wrapper-item chat-buttons"] $ do
         case refChans' of
           [] -> p_ $ small_ "There are no chats available"
-          someRefChans -> forM_ someRefChans $ \refChan ->
-            let refChanText = Text.pack $ show $ pretty $ AsBase58 refChan
-                refChanShortenedText = shorten 8 refChanText
+          someRefChans -> forM_ someRefChans $ \namedRefChan ->
+            let refChanKeyText = Text.pack $ show $ pretty $ AsBase58 $ namedRefChanKey namedRefChan
              in button_
                   [ class_ "outline chat-button"
                   , wsSend_ ""
-                  , hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanText <> "\"}"
+                  , hxVals_ $ "{\"type\": \"active-chat\", \"chat\": \"" <> refChanKeyText <> "\"}"
                   , handleChatSelect
                   ]
-                  $ toHtml refChanShortenedText
+                  $ toHtml
+                  $ namedRefChanName namedRefChan
       div_ [class_ "content-header wrapper-item header-color"] $ do
         div_ [id_ "chat-name"] ""
         div_ [class_ "header-right"] $ do
