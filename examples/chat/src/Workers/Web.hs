@@ -140,7 +140,13 @@ receiveLoop conn sessionID = do
         syncDBWithRefChan chat
         messageMeta <- withDB $ selectChatMessageMetadata pageSize Nothing chat
         messages <- mapM getDecryptedMessageByMetadata messageMeta
-        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
+        liftIO $
+          WS.sendTextData conn $
+            WSProtocolServerMessageOldMessages $
+              WSOldMessages
+                { wsOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML
+                , wsOldMessages = messages
+                }
         case messages of
           [] -> pure ()
           xs -> setLastMessageHashRef sessionID $ decryptedMessageHashRef $ head xs
@@ -174,7 +180,13 @@ receiveLoop conn sessionID = do
         activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
         messageMeta <- withDB $ selectChatMessageMetadata wsGetMessagesLimit (Just $ BeforeCursor wsGetMessagesCursor) activeChat
         messages <- mapM getDecryptedMessageByMetadata messageMeta
-        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageOldMessages $ WSOldMessages messages
+        liftIO $
+          WS.sendTextData conn $
+            WSProtocolServerMessageOldMessages $
+              WSOldMessages
+                { wsOldMessagesHXSwap = WSOldMessagesHXSwapBeforeEnd
+                , wsOldMessages = messages
+                }
       WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()

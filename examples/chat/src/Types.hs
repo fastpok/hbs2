@@ -213,7 +213,16 @@ instance FromJSON WSGetMessages where
     wsGetMessagesLimit <- v .: "limit"
     pure $ WSGetMessages{..}
 
-newtype WSOldMessages = WSOldMessages [DecryptedMessage]
+data WSOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML | WSOldMessagesHXSwapBeforeEnd
+
+hxSwapToText :: WSOldMessagesHXSwap -> Text
+hxSwapToText WSOldMessagesHXSwapInnerHTML = "innerHTML"
+hxSwapToText WSOldMessagesHXSwapBeforeEnd = "beforeend"
+
+data WSOldMessages = WSOldMessages
+  { wsOldMessagesHXSwap :: WSOldMessagesHXSwap
+  , wsOldMessages :: [DecryptedMessage]
+  }
 
 newtype WSNewMessages = WSNewMessages [DecryptedMessage]
 
@@ -263,16 +272,16 @@ mapMLast_ fRest fLast (x : xs) = do
   mapMLast_ fRest fLast xs
 
 instance ToHtml WSOldMessages where
-  toHtml (WSOldMessages messages) = div_
+  toHtml (WSOldMessages{..}) = div_
     [ id_ "messages"
-    , hxSwapOob_ "beforeend"
+    , hxSwapOob_ $ hxSwapToText wsOldMessagesHXSwap
     , data_ "message-type" "old-messages"
     ]
     do
       mapMLast_
         (messageToHtml DontApplyInfiniteScrollAttrs)
         (messageToHtml ApplyInfiniteScrollAttrs)
-        messages
+        wsOldMessages
   toHtmlRaw = toHtml
 
 instance ToHtml WSNewMessages where
