@@ -41,7 +41,7 @@
 .wrapper {
   height: 100%;
   display: grid;
-  grid-template-columns: 1fr 4fr 1fr;
+  grid-template-columns: minmax(10rem, 1fr) 4fr 1fr;
   grid-template-rows: auto 1fr;
   grid-template-areas:
     "sidebar-header content-header members-header"
