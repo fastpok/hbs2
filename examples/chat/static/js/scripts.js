@@ -12,24 +12,19 @@ function autoResize(element) {
   }
 }
 
-function scrollToBottom(element) {
-  element.scrollTop = element.scrollHeight;
-}
-
-function showNotification(messages) {
+function showNotification(message) {
   // TODO: show notifications in inactive chats
   // TODO: show chat, author and message content in notification
   Notification.requestPermission().then((result) => {
     if (result === "granted") {
       const img = "img/logo.jpg";
-      const notification = new Notification("New hbs2 messages", {
+      const notification = new Notification("New hbs2 message", {
         icon: img,
       });
-      // const lastMessage = message.data.json[message.data.json.length - 1];
       // const user = JSON.parse(localStorage.getItem("user"));
-      // if (user.publicKey !== lastMessage.author) {
-      //   const notification = new Notification(lastMessage.author, {
-      //     body: lastMessage.body,
+      // if (user.publicKey !== message.author) {
+      //   const notification = new Notification(message.author, {
+      //     body: message.body,
       //     icon: img,
       //   });
       // }
@@ -55,8 +50,8 @@ function handleIncomingWSMessage(message) {
     case "old-messages":
       handleOldMessages();
       break;
-    case "new-messages":
-      handleNewMessages();
+    case "new-message":
+      handleNewMessage();
       break;
     case "members":
       handleMembers();
@@ -66,13 +61,13 @@ function handleIncomingWSMessage(message) {
 
 function handleOldMessages(messages) {}
 
-function handleNewMessages(messages) {
+function handleNewMessage(message) {
   // TODO: don't show notifications when sending a message
-  showNotification(messages);
-  // TODO: scroll down automatically when sending a message
+  showNotification(message);
+  // TODO: scroll down automatically when sending a message, see https://htmx.org/attributes/hx-swap/
   // const messagesContainer = document.getElementById("messages");
   // if (...) {
-  //   scrollToBottom(messagesContainer);
+  //
   // }
 }
 

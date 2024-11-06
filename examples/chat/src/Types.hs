@@ -127,17 +127,20 @@ data WSSession = WSSession
   { wsSessionConn :: WS.Connection
   , wsSessionClientSigil :: MySigil
   , wsSessionActiveChat :: Maybe MyRefChan
-  , wsSessionLastMessageHashRef :: Maybe MyHashRef
+  , -- messages that were sent by the server to the client,
+    -- the order is the same as the order in which they are displayed to the client,
+    -- newer messages appear at the top of the list.
+    wsSessionMessages :: [MyHashRef]
   }
 
 data WSProtocolServerMessage
   = WSProtocolServerMessageOldMessages WSOldMessages
-  | WSProtocolServerMessageNewMessages WSNewMessages
+  | WSProtocolServerMessageNewMessage WSNewMessage
   | WSProtocolServerMessageMembers WSMembers
 
 instance ToHtml WSProtocolServerMessage where
   toHtml (WSProtocolServerMessageOldMessages messages) = toHtml messages
-  toHtml (WSProtocolServerMessageNewMessages messages) = toHtml messages
+  toHtml (WSProtocolServerMessageNewMessage message) = toHtml message
   toHtml (WSProtocolServerMessageMembers members) = toHtml members
   toHtmlRaw = toHtml
 
@@ -224,9 +227,18 @@ data WSOldMessages = WSOldMessages
   , wsOldMessages :: [DecryptedMessage]
   }
 
-newtype WSNewMessages = WSNewMessages [DecryptedMessage]
+data WSNewMessage = WSNewMessage
+  { wsNewMessagePrevMessageHashRef :: Maybe MyHashRef
+  , wsNewMessageMessage :: DecryptedMessage
+  }
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
+
+data MessageToHTMLOpts = MessageToHTMLOpts
+  { messageToHTMLOptsInfiniteScroll :: InfiniteScrollOpts
+  , messageToHTMLOptsMessageType :: Maybe Text
+  , messageToHTMLOptsSwapOOB :: Maybe Text
+  }
 
 pageSize :: Integer
 pageSize = 20
@@ -236,16 +248,29 @@ hxValsScroll cursor =
   [qc|
 \{
   "type": "get-messages",
-  "cursor": "{pretty cursor}",
+  "cursor": "{show $ pretty cursor}",
   "limit": {show pageSize}
 }
 |]
 
-messageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
-messageToHtml applyInfiniteScrollAttrs DecryptedMessage{..} =
+messageIDPrefix :: Text
+messageIDPrefix = "message-"
+
+messageToHTML :: (Monad m) => DecryptedMessage -> HtmlT m ()
+messageToHTML DecryptedMessage{..} = do
+  div_ [class_ "message-header"] $ do
+    let author = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthor
+        createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" decryptedMessageCreatedAt
+    div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
+    div_ $ small_ $ toHtml createdAt
+  div_ [class_ "message-content"] $ do
+    small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines decryptedMessageBody)
+
+oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
+oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
   let cursor = decryptedMessageHashRef
       hxVals = hxValsScroll cursor
-      infiniteScrollAttrs = case applyInfiniteScrollAttrs of
+      infiniteScrollAttrs = case infiniteScrollOpts of
         ApplyInfiniteScrollAttrs ->
           [ wsSend_ ""
           , hxVals_ hxVals
@@ -253,14 +278,23 @@ messageToHtml applyInfiniteScrollAttrs DecryptedMessage{..} =
           , hxSwap_ "afterend"
           ]
         DontApplyInfiniteScrollAttrs -> []
-   in div_ ([class_ "message"] <> infiniteScrollAttrs) $ do
-        div_ [class_ "message-header"] $ do
-          let author = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthor
-              createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" decryptedMessageCreatedAt
-          div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
-          div_ $ small_ $ toHtml createdAt
-        div_ [class_ "message-content"] $ do
-          small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines decryptedMessageBody)
+   in div_ ([class_ "message", id_ $ (messageIDPrefix <> T.pack (show $ pretty decryptedMessageHashRef))] <> infiniteScrollAttrs) $
+        messageToHTML message
+
+newMessageToHtml :: (Monad m) => Maybe MyHashRef -> DecryptedMessage -> HtmlT m ()
+newMessageToHtml maybePrevMessageHashRef message@DecryptedMessage{..} = do
+  let hxSwapOOB = case maybePrevMessageHashRef of
+        Nothing -> "afterbegin:#messages"
+        Just prevMessageHashRef -> "beforebegin:#" <> messageIDPrefix <> T.pack (show $ pretty prevMessageHashRef)
+  div_
+    [ data_ "message-type" "new-message"
+    , hxSwapOOB_ hxSwapOOB
+    ]
+    $ div_
+      [ class_ "message"
+      , id_ $ messageIDPrefix <> T.pack (show $ pretty decryptedMessageHashRef)
+      ]
+    $ messageToHTML message
 
 -- Applies first function to all elements except the last one.
 -- Applies second function to the last element.
@@ -274,26 +308,18 @@ mapMLast_ fRest fLast (x : xs) = do
 instance ToHtml WSOldMessages where
   toHtml (WSOldMessages{..}) = div_
     [ id_ "messages"
-    , hxSwapOob_ $ hxSwapToText wsOldMessagesHXSwap
+    , hxSwapOOB_ $ hxSwapToText wsOldMessagesHXSwap
     , data_ "message-type" "old-messages"
     ]
     do
       mapMLast_
-        (messageToHtml DontApplyInfiniteScrollAttrs)
-        (messageToHtml ApplyInfiniteScrollAttrs)
+        (oldMessageToHtml DontApplyInfiniteScrollAttrs)
+        (oldMessageToHtml ApplyInfiniteScrollAttrs)
         wsOldMessages
   toHtmlRaw = toHtml
 
-instance ToHtml WSNewMessages where
-  toHtml (WSNewMessages messages) = div_
-    [ id_ "messages"
-    , hxSwapOob_ "afterbegin"
-    , data_ "message-type" "new-messages"
-    ]
-    do
-      mapM_
-        (messageToHtml DontApplyInfiniteScrollAttrs)
-        messages
+instance ToHtml WSNewMessage where
+  toHtml (WSNewMessage{..}) = newMessageToHtml wsNewMessagePrevMessageHashRef wsNewMessageMessage
   toHtmlRaw = toHtml
 
 data RefChanMembers = RefChanMembers
@@ -323,7 +349,7 @@ data WSMembers = WSMembers
   }
 
 instance ToHtml WSMembers where
-  toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOob_ "innerHTML", data_ "message-type" "members"] do
+  toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOOB_ "innerHTML", data_ "message-type" "members"] do
     p_ "Authors"
     mapM_ toHtml wsMembersAuthors
     p_ [class_ "mt-1"] "Readers"
