@@ -31,6 +31,7 @@ import Network.Wai.Middleware.Static
 import Network.WebSockets qualified as WS
 import Pages.Login
 import Pages.Main
+import Safe
 import Types
 import UnliftIO
 import Web.Scotty.Trans
@@ -97,7 +98,7 @@ myWSApp conn = do
               { wsSessionConn = conn
               , wsSessionActiveChat = Nothing
               , wsSessionClientSigil = wsHelloClientSigil wsHello
-              , wsSessionLastMessageHashRef = Nothing
+              , wsSessionMessages = []
               }
       wsSessionID <- addWSSession wsSession
       let disconnect = removeWSSession wsSessionID
@@ -143,9 +144,7 @@ receiveLoop conn sessionID = do
                 { wsOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML
                 , wsOldMessages = messages
                 }
-        case messages of
-          [] -> pure ()
-          xs -> setLastMessageHashRef sessionID $ decryptedMessageHashRef $ head xs
+        setWSMessages sessionID (messageMetaHashRef <$> messageMeta)
         members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageMessage wsMessage -> do
@@ -190,12 +189,20 @@ sendLoop conn sessionID = do
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
         MessagesEvent eventChat -> when (eventChat == activeChat) $ do
-          newMessageMeta <- withDB $ selectChatMessageMetadata pageSize (AfterCursor <$> wsSessionLastMessageHashRef session) activeChat
-          newMessages <- mapM getDecryptedMessageByMetadata newMessageMeta
-          liftIO $ WS.sendTextData conn $ WSProtocolServerMessageNewMessages $ WSNewMessages newMessages
-          case newMessages of
-            [] -> pure ()
-            xs -> setLastMessageHashRef sessionID $ decryptedMessageHashRef $ head xs
+          let oldestSessionMessage = lastMay $ wsSessionMessages session
+          messagesMeta <- withDB $ selectChatMessageMetadata pageSize (AfterCursor <$> oldestSessionMessage) activeChat
+          let newMessagesMeta = filter (\meta -> notElem (messageMetaHashRef meta) (wsSessionMessages session)) messagesMeta
+          forM_ newMessagesMeta \newMessageMeta -> do
+            newMessage <- getDecryptedMessageByMetadata newMessageMeta
+            prevMessageHashRef <- withDB $ selectPrevMessageHashRef (decryptedMessageHashRef newMessage) activeChat
+            liftIO $
+              WS.sendTextData conn $
+                WSProtocolServerMessageNewMessage $
+                  WSNewMessage
+                    { wsNewMessageMessage = newMessage
+                    , wsNewMessagePrevMessageHashRef = prevMessageHashRef
+                    }
+          setWSMessages sessionID (messageMetaHashRef <$> messagesMeta)
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
@@ -249,22 +256,14 @@ setActiveChat wsSessionID chat = do
   atomically $
     modifyTVar wsSessionsTVar' $
       Map.adjust
-        ( \session ->
-            session
-              { wsSessionActiveChat = Just chat
-              }
-        )
+        (\session -> session{wsSessionActiveChat = Just chat})
         wsSessionID
 
-setLastMessageHashRef :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> MyHashRef -> m ()
-setLastMessageHashRef wsSessionID lastMessageHashRef = do
+setWSMessages :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> [MyHashRef] -> m ()
+setWSMessages wsSessionID messages = do
   wsSessionsTVar' <- asks wsSessionsTVar
   atomically $
     modifyTVar wsSessionsTVar' $
       Map.adjust
-        ( \session ->
-            session
-              { wsSessionLastMessageHashRef = Just lastMessageHashRef
-              }
-        )
+        (\session -> session{wsSessionMessages = messages})
         wsSessionID

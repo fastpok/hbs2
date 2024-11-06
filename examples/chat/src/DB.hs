@@ -4,6 +4,7 @@ import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import DBPipe.SQLite hiding (withDB)
 import DBPipe.SQLite qualified as DBPipe
+import Data.Maybe (listToMaybe)
 import Env
 import Text.InterpolatedString.Perl6 (qc)
 import Types
@@ -65,3 +66,18 @@ selectChatMessageMetadata limit maybeCursor refChan = do
       limit ?
     |]
     (refChan, maybeCursor, maybeCursor, limit)
+
+selectPrevMessageHashRef :: (MonadUnliftIO m) => MyHashRef -> MyRefChan -> DBPipeM m (Maybe MyHashRef)
+selectPrevMessageHashRef messageHashRef refChan = do
+  result <-
+    select @_ @_ @String
+      [qc|
+        select hash_ref from message_metadata
+        where chat_id = ? and (created_at, hash_ref) <
+          (select created_at, hash_ref from message_metadata
+          where chat_id = ? and hash_ref = ? limit 1)
+        order by created_at desc, hash_ref desc
+        limit 1
+      |]
+      (refChan, refChan, messageHashRef)
+  pure $ listToMaybe $ fromOnly <$> result
