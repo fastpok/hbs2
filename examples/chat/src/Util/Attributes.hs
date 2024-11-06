@@ -7,7 +7,7 @@ module Util.Attributes (
   hxParams_,
   hxDisinherit_,
   hxSwap_,
-  hxSwapOob_,
+  hxSwapOOB_,
   hxExt_,
   wsConnect_,
   wsSend_,
@@ -41,8 +41,8 @@ hxDisinherit_ = makeAttribute "hx-disinherit"
 hxSwap_ :: Text -> Attribute
 hxSwap_ = makeAttribute "hx-swap"
 
-hxSwapOob_ :: Text -> Attribute
-hxSwapOob_ = makeAttribute "hx-swap-oob"
+hxSwapOOB_ :: Text -> Attribute
+hxSwapOOB_ = makeAttribute "hx-swap-oob"
 
 hxExt_ :: Text -> Attribute
 hxExt_ = makeAttribute "hx-ext"
