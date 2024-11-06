@@ -7,7 +7,6 @@ import DB
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
 import Data.Text.Encoding qualified as TE
-import Data.Time
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID
 import Env
@@ -19,7 +18,6 @@ import HBS2.Net.Auth.Credentials hiding (encode)
 import HBS2.Net.Auth.Credentials.Sigil
 import HBS2.OrDie
 import HBS2.Peer.Proto.Mailbox.Message hiding (createMessage)
-import HBS2.Peer.Proto.Mailbox.Types
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.StorageClient
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
@@ -70,7 +68,7 @@ wsApp env pending = do
     conn
     \connection -> runReaderT (runAppM (myWSApp connection)) env
 
-createEncryptedMessage :: (MonadReader Env m, MonadUnliftIO m) => WSMessage -> WSSessionID -> m (EncryptedMessage, UTCTime)
+createEncryptedMessage :: (MonadReader Env m, MonadUnliftIO m) => WSMessage -> WSSessionID -> m EncryptedMessage
 createEncryptedMessage (WSMessage wsMessage) sessionID = do
   wsSessionsTVar' <- asks wsSessionsTVar
   wsSessions <- readTVarIO wsSessionsTVar'
@@ -87,9 +85,7 @@ createEncryptedMessage (WSMessage wsMessage) sessionID = do
           (runKeymanClientRO . loadKeyRingEntry)
       sender = Right $ fromMySigil $ wsSessionClientSigil wsSession
       recipients = fromMyEncryptionPublicKey <$> refChanMembersReaders refChanMembers
-      createdAt = getUTCTimeFromMessageTimestamp $ messageCreated messageFlags
-  encryptedMessage <- createMessage createMessageServices messageFlags Nothing sender recipients mempty (TE.encodeUtf8 wsMessage)
-  pure (encryptedMessage, createdAt)
+  createMessage createMessageServices messageFlags Nothing sender recipients mempty (TE.encodeUtf8 wsMessage)
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
@@ -153,7 +149,7 @@ receiveLoop conn sessionID = do
         members <- getChatMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageMessage wsMessage -> do
-        (encryptedMessage, createdAt) <- createEncryptedMessage wsMessage sessionID
+        encryptedMessage <- createEncryptedMessage wsMessage sessionID
         storageAPI <- asks storageAPI
         let storage = AnyStorage (StorageClient storageAPI)
         encryptedMessageHashRef <-
@@ -164,14 +160,6 @@ receiveLoop conn sessionID = do
         wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
         activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
         let author = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession
-            messageMetadata =
-              MessageMetadata
-                { messageMetaHashRef = encryptedMessageHashRef
-                , messageMetaChat = activeChat
-                , messageMetaAuthor = author
-                , messageMetaCreatedAt = createdAt
-                }
-        withDB $ insertMessageMetadata messageMetadata
         postHashRefToRefChan author activeChat encryptedMessageHashRef
       WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
         wsSessionsTVar' <- asks wsSessionsTVar
