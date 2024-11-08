@@ -196,11 +196,13 @@ sendLoop conn sessionID = do
           let newMessageMeta = filter (\meta -> Set.notMember (messageMetaHashRef meta) (wsSessionMessages session)) messageMeta
           forM_ newMessageMeta \meta -> do
             newMessage <- getDecryptedMessageByMetadata meta
+            let sessionClientPublicKey = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil session
             liftIO $
               WS.sendTextData conn $
                 WSProtocolServerMessageNewMessage $
                   WSNewMessage
                     { wsNewMessageMessage = newMessage
+                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthor newMessage
                     }
             addSessionMessageHashRefs sessionID $ Set.singleton $ decryptedMessageHashRef newMessage
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
