@@ -1,14 +1,43 @@
 # Quickstart
 
-1.  ```shell
-    cd examples/chat
-    ```
+1. Сlone the hbs2 repository
 
-2.  ```shell
-    cabal run chat
-    ```
+   ```shell
+    git clone hbs2://BTThPdHKF8XnEq4m6wzbKHKA6geLFK4ydYhBXAqBdHSP hbs2
+   ```
 
-3.  Open [localhost:3000](http://localhost:3000/) in your browser.
+2. Go to the hbs2 directory
+
+   ```shell
+   cd hbs2
+   ```
+
+3. Activate build environment
+
+   ```shell
+   nix develop
+   ```
+
+4. Create config file at `~/.config/hbs2-chat/config` with the following contents
+
+   ```
+   sigil "sigil.txt"
+   refchan "<refchan-id>" "chat-name"
+   ```
+
+   If you dont have sigils and refchans read the followng sections:
+
+   [Create chat refchan](#create-chat-refchan)
+
+   [Create sigil](#create-sigil)
+
+5. Run chat server
+
+   ```shell
+   cabal run chat
+   ```
+
+6. Open [localhost:3000](http://localhost:3000/) in your browser.
 
 ## Create chat refchan
 
@@ -40,9 +69,8 @@
    hbs2-peer refchan get <refchan-key>
    ```
 
-#### NOTE
-
-Command `hbs2-peer refchan get <refchan-key>` and chat app may not work on empty refchans. So you can write some message using CLI.
+> Note:
+> command `hbs2-peer refchan get <refchan-key>` and chat app may not work on empty refchans. So you can write some message to refchan using CLI.
 
 ```shell
 hbs2-peer refchan propose -a <author-key> -f some-file.txt <refchan-key>
@@ -70,7 +98,8 @@ hbs2 sigil create -k /path-to-keyring.key <encryption-key-from-keyring> > sigil.
 
 Edit refchan head file or create a new one.
 
-### NOTE: don't forget to increase version.
+> Note:
+> don't forget to increase refchan head version.
 
 ```shell
 hbs2-cli hbs2:refchan:head:update <refchan-key> new-refchan-head.txt

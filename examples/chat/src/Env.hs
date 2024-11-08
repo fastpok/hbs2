@@ -1,14 +1,16 @@
-module Env
-  ( Env (..),
-    initEnv,
-  )
+module Env (
+  Env (..),
+  initEnv,
+)
 where
 
-import Config
+import Config (Config, appName)
+import Config qualified
 import Control.Monad.IO.Unlift
 import DBPipe.SQLite
 import Data.Map (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe
 import Data.String (IsString (..))
 import HBS2.Net.Proto.Notify
 import HBS2.OrDie
@@ -23,14 +25,15 @@ import Types
 import UnliftIO
 
 data Env = Env
-  { config :: Config,
-    refChanAPI :: ServiceCaller RefChanAPI UNIX,
-    storageAPI :: ServiceCaller StorageAPI UNIX,
-    rpcSockPath :: FilePath,
-    refChanNotifySink :: NotifySink (RefChanEvents L4Proto) UNIX,
-    dbEnv :: DBPipeEnv,
-    wsSessionsTVar :: TVar (Map WSSessionID WSSession),
-    chatEventsChan :: TChan ChatEvent
+  { config :: Config
+  , refChanAPI :: ServiceCaller RefChanAPI UNIX
+  , storageAPI :: ServiceCaller StorageAPI UNIX
+  , rpcSockPath :: FilePath
+  , refChanNotifySink :: NotifySink (RefChanEvents L4Proto) UNIX
+  , dbEnv :: DBPipeEnv
+  , staticPath :: FilePath
+  , wsSessionsTVar :: TVar (Map WSSessionID WSSession)
+  , chatEventsChan :: TChan ChatEvent
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -39,11 +42,12 @@ initEnv config = do
   let peer = fromString rpcSockPath
   refChanAPI <- makeServiceCaller @RefChanAPI peer
   storageAPI <- makeServiceCaller @StorageAPI peer
-  dbEnv <- initDBEnv $ dbPath config
+  dbEnv <- initDBEnv $ Config.dbPath config
+  let staticPath = fromMaybe "examples/chat/static/" $ Config.staticPath config
   wsSessionsTVar <- newTVarIO Map.empty
   chatEventsChan <- newBroadcastTChanIO
   refChanNotifySink <- newNotifySink
-  pure $ Env {..}
+  pure $ Env{..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv
 initDBEnv maybeDBPath = do

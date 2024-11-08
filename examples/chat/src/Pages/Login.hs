@@ -52,8 +52,8 @@ htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
                         TL.toStrict $
                           Aeson.encodeToLazyText $
                             Aeson.object
-                              [ "sigil" .= T.pack (show $ pretty $ AsBase58 $ fromMySigil sigil),
-                                "publicKey" .= sigilSignPublicKey
+                              [ "sigil" .= T.pack (show $ pretty $ AsBase58 $ fromMySigil sigil)
+                              , "publicKey" .= sigilSignPublicKey
                               ]
                    in option_ [value_ userData] $ toHtml sigilSignPublicKey
               button_ [class_ "whitespace-nowrap", handleLogin] "Log in"
@@ -63,7 +63,7 @@ noSigilsMessage = do
   h2_ "No sigils available"
   p_ $ do
     "You can specify the sigils you want to use in the configuration file located at "
-    code_ "~/.config/" <> toHtml appName <> "/config"
+    code_ $ "~/.config/" <> toHtml appName <> "/config"
 
 handleLogin :: Attribute
 handleLogin =
