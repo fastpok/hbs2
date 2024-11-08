@@ -12,22 +12,27 @@ function autoResize(element) {
   }
 }
 
-function showNotification(message) {
+function scrollToBottom(element) {
+  element.scrollTop = element.scrollHeight;
+}
+
+function showNotification(messageElement) {
   // TODO: show notifications in inactive chats
-  // TODO: show chat, author and message content in notification
+  // TODO: show chat in notification
   Notification.requestPermission().then((result) => {
     if (result === "granted") {
       const img = "img/logo.jpg";
-      const notification = new Notification("New hbs2 message", {
+      const author = messageElement.querySelector(
+        ".message-header div strong small"
+      ).innerText;
+      // TODO: handle line breaks
+      const content = messageElement.querySelector(
+        ".message-content small"
+      ).innerText;
+      const notification = new Notification(author, {
         icon: img,
+        body: content,
       });
-      // const user = JSON.parse(localStorage.getItem("user"));
-      // if (user.publicKey !== message.author) {
-      //   const notification = new Notification(message.author, {
-      //     body: message.body,
-      //     icon: img,
-      //   });
-      // }
     }
   });
 }
@@ -37,41 +42,49 @@ function getUserSigil() {
   return user.sigil;
 }
 
-function getIncomingWSMessageType(message) {
+function parseIncomingWSMessageHTML(message) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(message, "text/html");
-  const messageContainer = doc.body.firstElementChild;
-  return messageContainer.dataset.messageType;
+  const messageElement = doc.body.firstElementChild;
+  return messageElement;
+}
+
+function isOwnMessage(messageElement) {
+  return messageElement.dataset.ownMessage !== undefined;
+}
+
+function getIncomingWSMessageType(messageElement) {
+  return messageElement.dataset.messageType;
 }
 
 function handleIncomingWSMessage(message) {
-  const messageType = getIncomingWSMessageType(message);
+  const messageElement = parseIncomingWSMessageHTML(message);
+  const messageType = getIncomingWSMessageType(messageElement);
   switch (messageType) {
     case "old-messages":
-      handleOldMessages();
+      handleOldMessages(messageElement);
       break;
     case "new-message":
-      handleNewMessage();
+      handleNewMessage(messageElement);
       break;
     case "members":
-      handleMembers();
+      handleMembers(messageElement);
       break;
   }
 }
 
-function handleOldMessages(messages) {}
+function handleOldMessages(messageElement) {}
 
-function handleNewMessage(message) {
-  // TODO: don't show notifications when sending a message
-  showNotification(message);
-  // TODO: scroll down automatically when sending a message, see https://htmx.org/attributes/hx-swap/
-  // const messagesContainer = document.getElementById("messages");
-  // if (...) {
-  //
-  // }
+function handleNewMessage(messageElement) {
+  if (isOwnMessage(messageElement)) {
+    const messagesContainer = document.getElementById("messages");
+    scrollToBottom(messagesContainer);
+  } else {
+    showNotification(messageElement);
+  }
 }
 
-function handleMembers(message) {}
+function handleMembers(messageElement) {}
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
