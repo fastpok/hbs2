@@ -225,8 +225,9 @@ data WSOldMessages = WSOldMessages
   , wsOldMessages :: [DecryptedMessage]
   }
 
-newtype WSNewMessage = WSNewMessage
+data WSNewMessage = WSNewMessage
   { wsNewMessageMessage :: DecryptedMessage
+  , wsNewMessageIsOwn :: Bool
   }
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
@@ -278,14 +279,17 @@ oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
    in div_ ([class_ "message"] <> infiniteScrollAttrs) $
         messageToHTML message
 
-newMessageToHtml :: (Monad m) => DecryptedMessage -> HtmlT m ()
-newMessageToHtml message =
-  div_
-    [ data_ "message-type" "new-message"
-    , hxSwapOOB_ "afterbegin:#messages"
-    ]
-    $ div_ [class_ "message"]
-    $ messageToHTML message
+newMessageToHtml :: (Monad m) => WSNewMessage -> HtmlT m ()
+newMessageToHtml WSNewMessage{..} =
+  div_ allAttrs $
+    div_ [class_ "message"] $
+      messageToHTML wsNewMessageMessage
+ where
+  attrs = [data_ "message-type" "new-message", hxSwapOOB_ "afterbegin:#messages"]
+  allAttrs =
+    if wsNewMessageIsOwn
+      then data_ "own-message" "" : attrs
+      else attrs
 
 -- Applies first function to all elements except the last one.
 -- Applies second function to the last element.
@@ -310,7 +314,7 @@ instance ToHtml WSOldMessages where
   toHtmlRaw = toHtml
 
 instance ToHtml WSNewMessage where
-  toHtml (WSNewMessage newMessage) = newMessageToHtml newMessage
+  toHtml = newMessageToHtml
   toHtmlRaw = toHtml
 
 data RefChanMembers = RefChanMembers
