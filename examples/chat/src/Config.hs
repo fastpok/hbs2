@@ -32,6 +32,7 @@ data Config = Config
   { sigils :: [MySigil]
   , refChans :: [NamedRefChan]
   , dbPath :: Maybe FilePath
+  , staticPath :: Maybe FilePath
   }
 
 defaultConfig :: String
@@ -40,7 +41,8 @@ defaultConfig =
 ; sigil "sigil-2.txt"
 ; refchan "<refchan-1-id>" "chat-name-1"
 ; refchan "<refchan-2-id>" "chat-name-2"
-; db-path state.db
+; db-path "state.db"
+; static-path "static/"
 |]
 
 data SigilCfgKey
@@ -48,6 +50,8 @@ data SigilCfgKey
 data RefChanCfgKey
 
 data DBPathKey
+
+data StaticPathKey
 
 instance HasCfgKey SigilCfgKey (Set FilePath) where
   key = "sigil"
@@ -57,6 +61,9 @@ instance HasCfgKey RefChanCfgKey [NamedRefChan] where
 
 instance HasCfgKey DBPathKey (Maybe FilePath) where
   key = "db-path"
+
+instance HasCfgKey StaticPathKey (Maybe FilePath) where
+  key = "static-path"
 
 readConfig :: (MonadUnliftIO m) => FilePath -> m [Syntax C]
 readConfig fn = liftIO (readFile fn) <&> fromRight mempty . parseTop
@@ -88,6 +95,7 @@ parseConfig :: (MonadUnliftIO m, HasConf m) => m Config
 parseConfig = do
   sigilFiles <- cfgValue @SigilCfgKey @(Set FilePath)
   dbPath <- cfgValue @DBPathKey @(Maybe FilePath)
+  staticPath <- cfgValue @StaticPathKey @(Maybe FilePath)
   sigils <- mapM parseSigilFile (Set.toList sigilFiles)
   refChans <- getRefChansFromConfig
   pure $ Config{..}
