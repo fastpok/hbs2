@@ -7,6 +7,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Parser)
 import Data.List qualified as L
 import Data.Maybe
+import Data.Set (Set)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.Encoding qualified as TLE
@@ -127,10 +128,7 @@ data WSSession = WSSession
   { wsSessionConn :: WS.Connection
   , wsSessionClientSigil :: MySigil
   , wsSessionActiveChat :: Maybe MyRefChan
-  , -- messages that were sent by the server to the client,
-    -- the order is the same as the order in which they are displayed to the client,
-    -- newer messages appear at the top of the list.
-    wsSessionMessages :: [MyHashRef]
+  , wsSessionMessages :: Set MyHashRef -- messages that were sent to the client
   }
 
 data WSProtocolServerMessage
@@ -227,9 +225,8 @@ data WSOldMessages = WSOldMessages
   , wsOldMessages :: [DecryptedMessage]
   }
 
-data WSNewMessage = WSNewMessage
-  { wsNewMessagePrevMessageHashRef :: Maybe MyHashRef
-  , wsNewMessageMessage :: DecryptedMessage
+newtype WSNewMessage = WSNewMessage
+  { wsNewMessageMessage :: DecryptedMessage
   }
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
@@ -278,22 +275,16 @@ oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
           , hxSwap_ "afterend"
           ]
         DontApplyInfiniteScrollAttrs -> []
-   in div_ ([class_ "message", id_ $ (messageIDPrefix <> T.pack (show $ pretty decryptedMessageHashRef))] <> infiniteScrollAttrs) $
+   in div_ ([class_ "message"] <> infiniteScrollAttrs) $
         messageToHTML message
 
-newMessageToHtml :: (Monad m) => Maybe MyHashRef -> DecryptedMessage -> HtmlT m ()
-newMessageToHtml maybePrevMessageHashRef message@DecryptedMessage{..} = do
-  let hxSwapOOB = case maybePrevMessageHashRef of
-        Nothing -> "afterbegin:#messages"
-        Just prevMessageHashRef -> "beforebegin:#" <> messageIDPrefix <> T.pack (show $ pretty prevMessageHashRef)
+newMessageToHtml :: (Monad m) => DecryptedMessage -> HtmlT m ()
+newMessageToHtml message =
   div_
     [ data_ "message-type" "new-message"
-    , hxSwapOOB_ hxSwapOOB
+    , hxSwapOOB_ "afterbegin:#messages"
     ]
-    $ div_
-      [ class_ "message"
-      , id_ $ messageIDPrefix <> T.pack (show $ pretty decryptedMessageHashRef)
-      ]
+    $ div_ [class_ "message"]
     $ messageToHTML message
 
 -- Applies first function to all elements except the last one.
@@ -319,7 +310,7 @@ instance ToHtml WSOldMessages where
   toHtmlRaw = toHtml
 
 instance ToHtml WSNewMessage where
-  toHtml (WSNewMessage{..}) = newMessageToHtml wsNewMessagePrevMessageHashRef wsNewMessageMessage
+  toHtml (WSNewMessage newMessage) = newMessageToHtml newMessage
   toHtmlRaw = toHtml
 
 data RefChanMembers = RefChanMembers
