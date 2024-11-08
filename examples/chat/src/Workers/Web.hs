@@ -49,14 +49,14 @@ webWorker = do
 makeScottyApp :: (MonadReader Env m, MonadUnliftIO m) => m Wai.Application
 makeScottyApp = do
   env <- ask
-  scottyAppT (runIO env) myScottyApp
+  scottyAppT (runIO env) (myScottyApp (staticPath env))
  where
   runIO :: Env -> AppM a -> IO a
   runIO env m = runReaderT (runAppM m) env
 
-myScottyApp :: ScottyT AppM ()
-myScottyApp = do
-  middleware $ staticPolicy (noDots >-> addBase "static")
+myScottyApp :: FilePath -> ScottyT AppM ()
+myScottyApp staticPath = do
+  middleware $ staticPolicy (noDots >-> addBase staticPath)
   defaultHandler exceptionHandler
   get "/" mainPage
   get "/login" loginPage
