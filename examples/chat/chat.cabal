@@ -123,4 +123,3 @@ executable chat
                   , uuid
                   , microlens-mtl
                   , unordered-containers
-                  , safe
