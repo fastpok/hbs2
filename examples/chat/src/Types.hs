@@ -91,7 +91,8 @@ type EncryptedMessage = Message 'HBS2Basic
 
 data DecryptedMessage = DecryptedMessage
   { decryptedMessageHashRef :: MyHashRef
-  , decryptedMessageAuthor :: MyPublicKey
+  , decryptedMessageAuthorKey :: MyPublicKey
+  , decryptedMessageAuthorName :: Maybe Text
   , decryptedMessageChat :: MyRefChan
   , decryptedMessageBody :: Text
   , decryptedMessageCreatedAt :: UTCTime
@@ -121,6 +122,8 @@ instance FromRow MessageMetadata where
     messageMetaAuthor <- field
     messageMetaCreatedAt <- field
     pure MessageMetadata{..}
+
+data SpecialMessage = SpecialMessageSetName Text
 
 type WSSessionID = UUID
 
@@ -257,7 +260,9 @@ messageIDPrefix = "message-"
 messageToHTML :: (Monad m) => DecryptedMessage -> HtmlT m ()
 messageToHTML DecryptedMessage{..} = do
   div_ [class_ "message-header"] $ do
-    let author = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthor
+    let author = case decryptedMessageAuthorName of
+          Nothing -> T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthorKey
+          Just name -> name
         createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" decryptedMessageCreatedAt
     div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
     div_ $ small_ $ toHtml createdAt
@@ -322,12 +327,17 @@ data RefChanMembers = RefChanMembers
   , refChanMembersAuthors :: [MyPublicKey]
   }
 
-newtype AuthorMember = AuthorMember {fromAuthorMember :: MyPublicKey}
+data AuthorMember = AuthorMember
+  { authorMemberKey :: MyPublicKey
+  , authorMemberName :: Maybe Text
+  }
 
 instance ToHtml AuthorMember where
-  toHtml (AuthorMember key) =
-    let username = T.pack $ show $ pretty $ AsBase58 key
-     in p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml $ shorten 8 username
+  toHtml (AuthorMember{..}) =
+    let username = case authorMemberName of
+          Nothing -> shorten 8 $ T.pack $ show $ pretty $ AsBase58 authorMemberKey
+          Just name -> name
+     in p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml username
   toHtmlRaw = toHtml
 
 newtype ReaderMember = ReaderMember {fromReaderMember :: MyEncryptionPublicKey}

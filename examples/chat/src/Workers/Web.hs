@@ -118,10 +118,12 @@ getDecryptedMessageByMetadata MessageMetadata{..} = do
       readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   encryptedMessage <- getMessageWait storage messageMetaHashRef
   (_authorPublicKey, _messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
+  maybeUsername <- withDB $ selectUsername messageMetaAuthor messageMetaChat
   pure $
     DecryptedMessage
       { decryptedMessageHashRef = messageMetaHashRef
-      , decryptedMessageAuthor = messageMetaAuthor
+      , decryptedMessageAuthorKey = messageMetaAuthor
+      , decryptedMessageAuthorName = maybeUsername
       , decryptedMessageChat = messageMetaChat
       , decryptedMessageCreatedAt = messageMetaCreatedAt
       , decryptedMessageBody = TE.decodeUtf8 messageDataBS
@@ -146,7 +148,7 @@ receiveLoop conn sessionID = do
                 , wsOldMessages = messages
                 }
         addSessionMessageHashRefs sessionID $ Set.fromList $ decryptedMessageHashRef <$> messages
-        members <- getChatMembersFromRefChan chat
+        members <- getWSMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageMessage wsMessage -> do
         encryptedMessage <- createEncryptedMessage wsMessage sessionID
@@ -202,7 +204,7 @@ sendLoop conn sessionID = do
                 WSProtocolServerMessageNewMessage $
                   WSNewMessage
                     { wsNewMessageMessage = newMessage
-                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthor newMessage
+                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthorKey newMessage
                     }
             addSessionMessageHashRefs sessionID $ Set.singleton $ decryptedMessageHashRef newMessage
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
