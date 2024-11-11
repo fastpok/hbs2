@@ -89,38 +89,38 @@ executable chat
                   , Workers.Web
 
     build-depends:  base
-                  , text
-                  , scotty
-                  , lucid
-                  , wai-middleware-static
-                  , hashable
-                  , mtl
-                  , unliftio-core
-                  , suckless-conf
+                  , aeson
+                  , attoparsec
+                  , bytestring
+                  , containers
+                  , db-pipe
                   , directory
                   , filepath
-                  , interpolatedstring-perl6
-                  , containers
-                  , hbs2-peer
+                  , hashable
                   , hbs2-core
-                  , bytestring
-                  , prettyprinter
-                  , unliftio
-                  , aeson
                   , hbs2-keyman-direct-lib
-                  , saltine
-                  , streaming
+                  , hbs2-peer
                   , http-types
-                  , transformers
-                  , serialise
-                  , time
-                  , db-pipe
-                  , sqlite-simple
-                  , websockets
-                  , warp
-                  , wai
-                  , wai-websockets
-                  , uuid
+                  , interpolatedstring-perl6
+                  , lucid
                   , microlens-mtl
+                  , mtl
+                  , prettyprinter
+                  , saltine
+                  , scotty
+                  , serialise
+                  , sqlite-simple
+                  , streaming
+                  , suckless-conf
+                  , text
+                  , time
+                  , transformers
+                  , unliftio
+                  , unliftio-core
                   , unordered-containers
-                  , attoparsec
+                  , uuid
+                  , wai
+                  , wai-middleware-static
+                  , wai-websockets
+                  , warp
+                  , websockets
