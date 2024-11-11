@@ -4,6 +4,9 @@ import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import DBPipe.SQLite hiding (withDB)
 import DBPipe.SQLite qualified as DBPipe
+import Data.Maybe (listToMaybe)
+import Data.Text (Text)
+import Data.Time (UTCTime)
 import Env
 import Text.InterpolatedString.Perl6 (qc)
 import Types
@@ -13,10 +16,11 @@ withDB action = do
   dbEnv' <- asks dbEnv
   DBPipe.withDB dbEnv' action
 
--- TODO: create index
+-- TODO: create indexes
 initDBTables :: (MonadReader Env m, MonadUnliftIO m) => m ()
 initDBTables = withDB do
   createMessageMetadataTable
+  createUsernamesTable
 
 createMessageMetadataTable :: (MonadUnliftIO m) => DBPipeM m ()
 createMessageMetadataTable =
@@ -29,6 +33,46 @@ createMessageMetadataTable =
         created_at text not null
       )
     |]
+
+createUsernamesTable :: (MonadUnliftIO m) => DBPipeM m ()
+createUsernamesTable =
+  ddl @String
+    [qc|
+      create table if not exists usernames (
+        user_id text not null,
+        chat_id text not null,
+        username text not null,
+        created_at text not null,
+        primary key (user_id, chat_id)
+      )
+    |]
+
+insertUsername :: (MonadUnliftIO m) => MyPublicKey -> MyRefChan -> Text -> UTCTime -> DBPipeM m ()
+insertUsername userKey refChan username createdAt = do
+  insert @String
+    [qc|
+      insert into usernames (user_id, chat_id, username, created_at)
+      values (?, ?, ?, ?)
+      on conflict (user_id, chat_id) do update set 
+        username = excluded.username,
+        created_at = excluded.created_at
+      where excluded.created_at > usernames.created_at
+    |]
+    (userKey, refChan, username, createdAt)
+
+selectUsername :: (MonadUnliftIO m) => MyPublicKey -> MyRefChan -> DBPipeM m (Maybe Text)
+selectUsername userKey refChan = do
+  result <-
+    select @_ @_ @String
+      [qc|
+        select username from usernames
+        where
+          user_id = ?
+          and
+          chat_id = ?
+      |]
+      (userKey, refChan)
+  pure $ listToMaybe $ fromOnly <$> result
 
 insertMessageMetadata :: (MonadUnliftIO m) => MessageMetadata -> DBPipeM m ()
 insertMessageMetadata messageMetadata = do
