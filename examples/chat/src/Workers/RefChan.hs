@@ -49,15 +49,15 @@ refChanWorker = do
             syncDBWithRefChan refChanKey
             atomically $ writeTChan chatEventsChan' $ MessagesEvent refChanKey
           RefChanHeadUpdated _ _ newRefChanHeadHashRef -> do
-            refChanHead <- readRefChanHead newRefChanHeadHashRef >>= orThrow (ServerError "can't request refchan head")
-            let readers = HS.toList $ view refChanHeadReaders refChanHead
-                authors = HS.toList $ view refChanHeadAuthors refChanHead
+            newRefChanHead <- readRefChanHead newRefChanHeadHashRef >>= orThrow (ServerError "can't request refchan head")
+            let refChanMembers = getRefChanHeadMembers newRefChanHead
+            wsMembers <- getWSMembersFromRefChanMembers refChanMembers refChanKey
             atomically $
               writeTChan chatEventsChan' $
                 MembersEvent
                   { membersEventRefChan = refChanKey
-                  , membersEventAuthors = AuthorMember . MyPublicKey <$> authors
-                  , membersEventReaders = ReaderMember . MyEncryptionPublicKey <$> readers
+                  , membersEventAuthors = wsMembersAuthors wsMembers
+                  , membersEventReaders = wsMembersReaders wsMembers
                   }
             pure ()
           _ -> pure ()
@@ -68,15 +68,20 @@ syncDBWithRefChan refChan = do
   allChatMessages <- getAllChatMessagesFromRefChan refChan
   let readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   forM_ allChatMessages $ \(hashRef, encryptedMessage) -> do
-    (authorPublicKey, messageContent, _messageDataBS) <- readMessage readMessageServices encryptedMessage
-    let messageMetadata =
+    (authorPublicKey, messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
+    let authorPublicKey' = MyPublicKey authorPublicKey
+        createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
+        messageMetadata =
           MessageMetadata
             { messageMetaHashRef = hashRef
             , messageMetaChat = refChan
-            , messageMetaAuthor = MyPublicKey authorPublicKey
-            , messageMetaCreatedAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
+            , messageMetaAuthor = authorPublicKey'
+            , messageMetaCreatedAt = createdAt
             }
     withDB $ insertMessageMetadata messageMetadata
+    case parseSpecialMessage messageDataBS of
+      Just (SpecialMessageSetName username) -> withDB $ insertUsername authorPublicKey' refChan username createdAt
+      Nothing -> pure ()
 
 getAllChatMessagesFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m [(MyHashRef, EncryptedMessage)]
 getAllChatMessagesFromRefChan refChan = do
@@ -118,24 +123,40 @@ readRefChanHead refChanHeadHashRef = do
     (_, headBlock) <- MaybeT $ pure $ unboxSignedBox @_ @'HBS2Basic headBlob
     pure headBlock
 
+getRefChanHeadMembers :: RefChanHeadBlock L4Proto -> RefChanMembers
+getRefChanHeadMembers refChanHead =
+  RefChanMembers
+    { refChanMembersReaders = readers
+    , refChanMembersAuthors = authors
+    }
+ where
+  readers = MyEncryptionPublicKey <$> HS.toList (view refChanHeadReaders refChanHead)
+  authors = MyPublicKey <$> HS.toList (view refChanHeadAuthors refChanHead)
+
 getRefChanMembers :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m RefChanMembers
 getRefChanMembers refChan = do
   storageAPI <- asks storageAPI
   let storage = AnyStorage (StorageClient storageAPI)
   refChanHead <- getRefChanHead @L4Proto storage (RefChanHeadKey $ fromMyPublicKey refChan) >>= orThrow (ServerError "can't request refchan head")
-  let readers = MyEncryptionPublicKey <$> HS.toList (view refChanHeadReaders refChanHead)
-      authors = MyPublicKey <$> HS.toList (view refChanHeadAuthors refChanHead)
-  pure $
-    RefChanMembers
-      { refChanMembersReaders = readers
-      , refChanMembersAuthors = authors
-      }
+  pure $ getRefChanHeadMembers refChanHead
 
-getChatMembersFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m WSMembers
-getChatMembersFromRefChan refChan = do
-  refChanMembers <- getRefChanMembers refChan
+getWSMembersFromRefChanMembers :: (MonadUnliftIO m, MonadReader Env m) => RefChanMembers -> MyRefChan -> m WSMembers
+getWSMembersFromRefChanMembers refChanMembers refChan = do
+  authors <- forM (refChanMembersAuthors refChanMembers) \authorKey -> do
+    authorName <- withDB $ selectUsername authorKey refChan
+    pure $
+      AuthorMember
+        { authorMemberKey = authorKey
+        , authorMemberName = authorName
+        }
+  let readers = ReaderMember <$> refChanMembersReaders refChanMembers
   pure $
     WSMembers
-      { wsMembersAuthors = AuthorMember <$> refChanMembersAuthors refChanMembers
-      , wsMembersReaders = ReaderMember <$> refChanMembersReaders refChanMembers
+      { wsMembersAuthors = authors
+      , wsMembersReaders = readers
       }
+
+getWSMembersFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m WSMembers
+getWSMembersFromRefChan refChan = do
+  refChanMembers <- getRefChanMembers refChan
+  getWSMembersFromRefChanMembers refChanMembers refChan

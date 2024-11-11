@@ -13,8 +13,12 @@ import HBS2.Net.Auth.Schema ()
 import HBS2.OrDie
 
 import Codec.Serialise
+import Data.Attoparsec.Text (Parser)
+import Data.Attoparsec.Text qualified as Atto
 import Data.ByteString (ByteString)
 import Data.Set qualified as Set
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time
 import Data.Time.Clock.POSIX
 import HBS2.Prelude
@@ -92,3 +96,20 @@ getMessageWait storage messageHashRef = do
     Nothing -> do
       pause @'Seconds 0.1
       getMessageWait storage messageHashRef
+
+specialMessageParser :: Parser SpecialMessage
+specialMessageParser = do
+  Atto.skipSpace
+  _ <- Atto.string "/name"
+  Atto.skipSpace
+  arg <- Atto.takeText
+  let strippedArg = T.strip arg
+  if T.null strippedArg
+    then fail "No arguments found"
+    else return $ SpecialMessageSetName strippedArg
+
+parseSpecialMessage :: ByteString -> Maybe SpecialMessage
+parseSpecialMessage message =
+  eitherToMaybe $
+    Atto.parseOnly specialMessageParser $
+      TE.decodeUtf8 message
