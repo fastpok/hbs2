@@ -215,6 +215,14 @@ sendLoop conn sessionID = do
                   { wsMembersReaders = membersEventReaders
                   , wsMembersAuthors = membersEventAuthors
                   }
+        NameEvent{..} -> when (nameEventRefChan == activeChat) $ do
+          liftIO $
+            WS.sendTextData conn $
+              WSProtocolServerMessageName $
+                WSName
+                  { wsNameUserKey = nameEventUserKey
+                  , wsNameUserName = nameEventUserName
+                  }
 
 postHashRefToRefChan :: (MonadReader Env m, MonadUnliftIO m) => MyPublicKey -> MyRefChan -> MyHashRef -> m ()
 postHashRefToRefChan author refChan hashRef = do

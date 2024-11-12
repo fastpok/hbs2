@@ -65,6 +65,7 @@ refChanWorker = do
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
+  chatEventsChan' <- asks chatEventsChan
   allChatMessages <- getAllChatMessagesFromRefChan refChan
   let readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   forM_ allChatMessages $ \(hashRef, encryptedMessage) -> do
@@ -80,7 +81,16 @@ syncDBWithRefChan refChan = do
             }
     withDB $ insertMessageMetadata messageMetadata
     case parseSpecialMessage messageDataBS of
-      Just (SpecialMessageSetName username) -> withDB $ insertUsername authorPublicKey' refChan username createdAt
+      Just (SpecialMessageSetName username) -> do
+        nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
+        when nameUpdated $
+          atomically $
+            writeTChan chatEventsChan' $
+              NameEvent
+                { nameEventRefChan = refChan
+                , nameEventUserKey = authorPublicKey'
+                , nameEventUserName = username
+                }
       Nothing -> pure ()
 
 getAllChatMessagesFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m [(MyHashRef, EncryptedMessage)]

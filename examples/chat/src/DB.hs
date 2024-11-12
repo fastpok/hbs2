@@ -4,7 +4,7 @@ import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import DBPipe.SQLite hiding (withDB)
 import DBPipe.SQLite qualified as DBPipe
-import Data.Maybe (listToMaybe)
+import Data.Maybe
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Env
@@ -47,18 +47,22 @@ createUsernamesTable =
       )
     |]
 
-insertUsername :: (MonadUnliftIO m) => MyPublicKey -> MyRefChan -> Text -> UTCTime -> DBPipeM m ()
+insertUsername :: (MonadUnliftIO m) => MyPublicKey -> MyRefChan -> Text -> UTCTime -> DBPipeM m Bool
 insertUsername userKey refChan username createdAt = do
-  insert @String
-    [qc|
-      insert into usernames (user_id, chat_id, username, created_at)
-      values (?, ?, ?, ?)
-      on conflict (user_id, chat_id) do update set 
-        username = excluded.username,
-        created_at = excluded.created_at
-      where excluded.created_at > usernames.created_at
-    |]
-    (userKey, refChan, username, createdAt)
+  -- A RETURNING clause for an UPSERT reports both inserted and updated rows.
+  result <-
+    select @_ @_ @String
+      [qc|
+        insert into usernames (user_id, chat_id, username, created_at)
+        values (?, ?, ?, ?)
+        on conflict (user_id, chat_id) do update set 
+          username = excluded.username,
+          created_at = excluded.created_at
+        where excluded.created_at > usernames.created_at
+        returning 1
+      |]
+      (userKey, refChan, username, createdAt)
+  pure $ maybe False fromOnly $ listToMaybe result
 
 selectUsername :: (MonadUnliftIO m) => MyPublicKey -> MyRefChan -> DBPipeM m (Maybe Text)
 selectUsername userKey refChan = do
