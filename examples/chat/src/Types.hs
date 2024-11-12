@@ -355,11 +355,7 @@ data WSMembers = WSMembers
 
 instance ToHtml WSMembers where
   toHtml (WSMembers{..}) = div_ [id_ "members", hxSwapOOB_ "innerHTML", data_ "message-type" "members"] do
-    p_ "Authors"
     mapM_ toHtml wsMembersAuthors
-    p_ [class_ "mt-1"] "Readers"
-    mapM_ toHtml wsMembersReaders
-
   toHtmlRaw = toHtml
 
 data ChatEvent
