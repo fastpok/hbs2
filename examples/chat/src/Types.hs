@@ -138,11 +138,13 @@ data WSProtocolServerMessage
   = WSProtocolServerMessageOldMessages WSOldMessages
   | WSProtocolServerMessageNewMessage WSNewMessage
   | WSProtocolServerMessageMembers WSMembers
+  | WSProtocolServerMessageName WSName
 
 instance ToHtml WSProtocolServerMessage where
   toHtml (WSProtocolServerMessageOldMessages messages) = toHtml messages
   toHtml (WSProtocolServerMessageNewMessage message) = toHtml message
   toHtml (WSProtocolServerMessageMembers members) = toHtml members
+  toHtml (WSProtocolServerMessageName name) = toHtml name
   toHtmlRaw = toHtml
 
 instance WebSocketsData WSProtocolServerMessage where
@@ -235,12 +237,6 @@ data WSNewMessage = WSNewMessage
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
 
-data MessageToHTMLOpts = MessageToHTMLOpts
-  { messageToHTMLOptsInfiniteScroll :: InfiniteScrollOpts
-  , messageToHTMLOptsMessageType :: Maybe Text
-  , messageToHTMLOptsSwapOOB :: Maybe Text
-  }
-
 pageSize :: Integer
 pageSize = 20
 
@@ -254,40 +250,38 @@ hxValsScroll cursor =
 }
 |]
 
-messageIDPrefix :: Text
-messageIDPrefix = "message-"
-
 messageToHTML :: (Monad m) => DecryptedMessage -> HtmlT m ()
 messageToHTML DecryptedMessage{..} = do
   div_ [class_ "message-header"] $ do
-    let author = case decryptedMessageAuthorName of
-          Nothing -> T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthorKey
-          Just name -> name
+    let authoreKeyText = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthorKey
+        authorName = fromMaybe authoreKeyText decryptedMessageAuthorName
         createdAt = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" decryptedMessageCreatedAt
-    div_ [class_ $ userNameToColorClass author] $ strong_ $ small_ $ toHtml author
+    div_ [class_ $ userNameToColorClass authoreKeyText] $ strong_ $ small_ [class_ "author-name"] $ toHtml authorName
     div_ $ small_ $ toHtml createdAt
   div_ [class_ "message-content"] $ do
     small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines decryptedMessageBody)
 
 oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
 oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
-  let cursor = decryptedMessageHashRef
-      hxVals = hxValsScroll cursor
-      infiniteScrollAttrs = case infiniteScrollOpts of
-        ApplyInfiniteScrollAttrs ->
-          [ wsSend_ ""
-          , hxVals_ hxVals
-          , hxTrigger_ "intersect once delay:200ms"
-          , hxSwap_ "afterend"
-          ]
-        DontApplyInfiniteScrollAttrs -> []
-   in div_ ([class_ "message"] <> infiniteScrollAttrs) $
-        messageToHTML message
+  div_ ([class_ "message", data_ "author-key" authorKeyText] <> infiniteScrollAttrs) $
+    messageToHTML message
+ where
+  cursor = decryptedMessageHashRef
+  hxVals = hxValsScroll cursor
+  infiniteScrollAttrs = case infiniteScrollOpts of
+    ApplyInfiniteScrollAttrs ->
+      [ wsSend_ ""
+      , hxVals_ hxVals
+      , hxTrigger_ "intersect once delay:200ms"
+      , hxSwap_ "afterend"
+      ]
+    DontApplyInfiniteScrollAttrs -> []
+  authorKeyText = T.pack $ show $ pretty $ AsBase58 $ decryptedMessageAuthorKey
 
 newMessageToHtml :: (Monad m) => WSNewMessage -> HtmlT m ()
 newMessageToHtml WSNewMessage{..} =
   div_ allAttrs $
-    div_ [class_ "message"] $
+    div_ [class_ "message", data_ "author-key" authorKeyText] $
       messageToHTML wsNewMessageMessage
  where
   attrs = [data_ "message-type" "new-message", hxSwapOOB_ "afterbegin:#messages"]
@@ -295,6 +289,7 @@ newMessageToHtml WSNewMessage{..} =
     if wsNewMessageIsOwn
       then data_ "own-message" "" : attrs
       else attrs
+  authorKeyText = T.pack $ show $ pretty $ AsBase58 $ decryptedMessageAuthorKey wsNewMessageMessage
 
 -- Applies first function to all elements except the last one.
 -- Applies second function to the last element.
@@ -335,10 +330,8 @@ data AuthorMember = AuthorMember
 instance ToHtml AuthorMember where
   toHtml (AuthorMember{..}) =
     let authorKeyText = T.pack $ show $ pretty $ AsBase58 authorMemberKey
-        (username, colorClass) = case authorMemberName of
-          Nothing -> (shorten 8 authorKeyText, userNameToColorClass authorKeyText)
-          Just name -> (name, userNameToColorClass name)
-     in p_ [class_ colorClass] $ small_ $ toHtml username
+        authorName = fromMaybe (shorten 8 authorKeyText) authorMemberName
+     in p_ [class_ $ userNameToColorClass authorKeyText, data_ "author-key" authorKeyText] $ small_ [class_ "author-name"] $ toHtml authorName
   toHtmlRaw = toHtml
 
 newtype ReaderMember = ReaderMember {fromReaderMember :: MyEncryptionPublicKey}
@@ -359,10 +352,27 @@ instance ToHtml WSMembers where
     mapM_ toHtml wsMembersAuthors
   toHtmlRaw = toHtml
 
+data WSName = WSName
+  { wsNameUserKey :: MyPublicKey
+  , wsNameUserName :: Text
+  }
+
+instance ToHtml WSName where
+  toHtml (WSName{..}) = do
+    let authorKeyText = T.pack $ show $ pretty $ AsBase58 $ wsNameUserKey
+        messagesOOB = "textContent:[data-author-key=\"" <> authorKeyText <> "\"] .author-name"
+    div_ [hxSwapOOB_ messagesOOB, data_ "message-type" "name"] $ toHtml wsNameUserName
+  toHtmlRaw = toHtml
+
 data ChatEvent
   = MessagesEvent MyRefChan
   | MembersEvent
       { membersEventRefChan :: MyRefChan
       , membersEventAuthors :: [AuthorMember]
       , membersEventReaders :: [ReaderMember]
+      }
+  | NameEvent
+      { nameEventRefChan :: MyRefChan
+      , nameEventUserKey :: MyPublicKey
+      , nameEventUserName :: Text
       }
