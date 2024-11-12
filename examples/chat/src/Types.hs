@@ -334,10 +334,11 @@ data AuthorMember = AuthorMember
 
 instance ToHtml AuthorMember where
   toHtml (AuthorMember{..}) =
-    let username = case authorMemberName of
-          Nothing -> shorten 8 $ T.pack $ show $ pretty $ AsBase58 authorMemberKey
+    let authorKeyText = T.pack $ show $ pretty $ AsBase58 authorMemberKey
+        username = case authorMemberName of
+          Nothing -> shorten 8 authorKeyText
           Just name -> name
-     in p_ [class_ $ userNameToColorClass username] $ small_ $ toHtml username
+     in p_ [class_ $ userNameToColorClass authorKeyText] $ small_ $ toHtml username
   toHtmlRaw = toHtml
 
 newtype ReaderMember = ReaderMember {fromReaderMember :: MyEncryptionPublicKey}
