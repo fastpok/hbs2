@@ -18,7 +18,7 @@ import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
 import Types
-import Util.Attributes
+import Util.Lucid.Attributes
 import Web.Scotty.Trans
 
 loginPage :: ActionT AppM ()

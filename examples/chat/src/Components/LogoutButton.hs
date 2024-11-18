@@ -3,15 +3,15 @@ module Components.LogoutButton (logoutButton) where
 import Components.Icons
 import Lucid
 import Text.InterpolatedString.Perl6 (qc)
-import Util.Attributes
+import Util.Lucid.Attributes
 
 logoutButton :: Html ()
 logoutButton = button_
-  [ class_ "outline header-button",
-    title_ "Log out",
-    ariaLabel_ "auto",
-    ariaLive_ "polite",
-    handleLogout
+  [ class_ "outline header-button"
+  , title_ "Log out"
+  , ariaLabel_ "auto"
+  , ariaLive_ "polite"
+  , handleLogout
   ]
   $ do
     makeIcon Logout

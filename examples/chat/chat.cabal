@@ -81,7 +81,8 @@ executable chat
                   , Message
                   , Monad
                   , Types
-                  , Util.Attributes
+                  , Util.Lucid.Attributes
+                  , Util.Lucid.Elements
                   , Util.Text
                   , Util.UserNameColor
                   , Workers

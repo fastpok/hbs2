@@ -1,18 +1,4 @@
-module Util.Attributes (
-  ariaLabel_,
-  ariaLive_,
-  hyper_,
-  hxTrigger_,
-  hxVals_,
-  hxParams_,
-  hxDisinherit_,
-  hxSwap_,
-  hxSwapOOB_,
-  hxExt_,
-  wsConnect_,
-  wsSend_,
-)
-where
+module Util.Lucid.Attributes where
 
 import Data.Text (Text)
 import Lucid.Base

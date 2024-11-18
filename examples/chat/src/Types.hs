@@ -24,7 +24,7 @@ import Lucid
 import Network.WebSockets (WebSocketsData)
 import Network.WebSockets qualified as WS
 import Text.InterpolatedString.Perl6 (qc)
-import Util.Attributes
+import Util.Lucid.Attributes
 import Util.Text
 import Util.UserNameColor
 
@@ -94,7 +94,7 @@ data DecryptedMessage = DecryptedMessage
   , decryptedMessageAuthorKey :: MyPublicKey
   , decryptedMessageAuthorName :: Maybe Text
   , decryptedMessageChat :: MyRefChan
-  , decryptedMessageBody :: Text
+  , decryptedMessageBody :: WSMessage
   , decryptedMessageCreatedAt :: UTCTime
   }
 
@@ -155,7 +155,8 @@ instance WebSocketsData WSProtocolServerMessage where
 data WSProtocolClientMessage
   = WSProtocolClientMessageHello WSHello
   | WSProtocolClientMessageActiveChat WSActiveChat
-  | WSProtocolClientMessageMessage WSMessage
+  | WSProtocolClientMessageTextMessage WSTextMessage
+  | WSProtocolClientMessageImageMessage WSImageMessage
   | WSProtocolClientMessageGetMessages WSGetMessages
 
 instance FromJSON WSProtocolClientMessage where
@@ -164,7 +165,8 @@ instance FromJSON WSProtocolClientMessage where
     case messageType of
       "hello" -> WSProtocolClientMessageHello <$> parseJSON (Object v)
       "active-chat" -> WSProtocolClientMessageActiveChat <$> parseJSON (Object v)
-      "message" -> WSProtocolClientMessageMessage <$> parseJSON (Object v)
+      "text-message" -> WSProtocolClientMessageTextMessage <$> parseJSON (Object v)
+      "image-message" -> WSProtocolClientMessageImageMessage <$> parseJSON (Object v)
       "get-messages" -> WSProtocolClientMessageGetMessages <$> parseJSON (Object v)
       _ -> fail $ "Unknown message type: " <> show messageType
 
@@ -193,14 +195,32 @@ instance FromJSON WSActiveChat where
     chat <- v .: "chat"
     pure $ WSActiveChat chat
 
-newtype WSMessage = WSMessage
-  { wsMessage :: Text
-  }
+newtype WSTextMessage = WSTextMessage Text
+  deriving (Generic)
 
-instance FromJSON WSMessage where
-  parseJSON = withObject "WSMessage" $ \v -> do
+instance Serialise WSTextMessage
+
+instance FromJSON WSTextMessage where
+  parseJSON = withObject "WSTextMessage" $ \v -> do
     message <- v .: "message"
-    pure $ WSMessage message
+    pure $ WSTextMessage message
+
+newtype WSImageMessage = WSImageMessage Text
+  deriving (Generic)
+
+instance Serialise WSImageMessage
+
+instance FromJSON WSImageMessage where
+  parseJSON = withObject "WSImageMessage" $ \v -> do
+    message <- v .: "message"
+    pure $ WSImageMessage message
+
+data WSMessage
+  = WSMessageText WSTextMessage
+  | WSMessageImage WSImageMessage
+  deriving (Generic)
+
+instance Serialise WSMessage
 
 data Cursor = AfterCursor MyHashRef | BeforeCursor MyHashRef
 
@@ -259,7 +279,9 @@ messageToHTML DecryptedMessage{..} = do
     div_ [class_ $ userNameToColorClass authoreKeyText] $ strong_ $ small_ [class_ "author-name"] $ toHtml authorName
     div_ $ small_ $ toHtml createdAt
   div_ [class_ "message-content"] $ do
-    small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines decryptedMessageBody)
+    case decryptedMessageBody of
+      WSMessageText (WSTextMessage text) -> small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines text)
+      WSMessageImage (WSImageMessage dataURL) -> img_ [src_ dataURL]
 
 oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
 oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
