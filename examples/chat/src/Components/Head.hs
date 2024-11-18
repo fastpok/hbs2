@@ -12,6 +12,7 @@ htmlHead = head_ $ do
   script_ [src_ "js/htmx.min.js", defer_ ""] ("" :: String)
   script_ [src_ "js/htmx-ext-ws.js", defer_ ""] ("" :: String)
   script_ [src_ "js/hyperscript.min.js", defer_ ""] ("" :: String)
+  script_ [src_ "js/modal.js", defer_ ""] ("" :: String)
   script_ [src_ "js/scripts.js", defer_ ""] ("" :: String)
   link_ [rel_ "stylesheet", href_ "css/pico.min.css"]
   link_ [rel_ "stylesheet", href_ "css/pico.colors.min.css"]
