@@ -17,7 +17,8 @@ import Monad
 import Prettyprinter
 import Text.InterpolatedString.Perl6 (qc)
 import Types
-import Util.Attributes
+import Util.Lucid.Attributes
+import Util.Lucid.Elements
 import Web.Scotty.Trans
 
 mainPage :: ActionT AppM ()
@@ -37,11 +38,11 @@ htmlBody refChans' = body_
   , wsConnect_ "/"
   , wsSend_ ""
   , hxTrigger_ "htmx:wsOpen"
-  , hxVals_ "js:{\"type\": \"hello\", \"client\": getUserSigil()}"
+  , hxVals_ "js:{type: \"hello\", client: getUserSigil()}"
   , -- hxDisinherit_ doesn't seem to work
     -- https://github.com/bigskysoftware/htmx/issues/1119
     hxDisinherit_ "hx-vals"
-  , handleWSMessages
+  , handleWSAfterMessage
   , handleWSClose
   , handleWSOpen
   ]
@@ -81,7 +82,7 @@ htmlBody refChans' = body_
         div_ [class_ "hidden", id_ "chat"] $ do
           div_ [class_ "messages", id_ "messages"] ""
           div_ [class_ "message-input-wrapper"] $
-            form_ [id_ "message-form", wsSend_ "", hxVals_ "{\"type\": \"message\"}"] $
+            form_ [id_ "message-form", wsSend_ "", hxVals_ "{\"type\": \"text-message\"}"] $
               fieldset_ [role_ "group", class_ "mb-0"] $
                 do
                   textarea_
@@ -96,10 +97,43 @@ htmlBody refChans' = body_
                     ]
                     ""
                   button_
-                    [class_ "outline send-message", type_ "submit"]
+                    [ class_ "outline message-form-button send-image"
+                    , type_ "button"
+                    , data_ "target" "send-image-modal"
+                    , onclick_ "toggleModal(event)"
+                    ]
+                    $ makeIcon Photo
+                  button_
+                    [class_ "outline message-form-button send-message", type_ "submit"]
                     $ makeIcon PaperAirplane
       div_ [class_ "members-header wrapper-item header-color"] "Members"
       div_ [class_ "members wrapper-item", id_ "members"] ""
+      sendImageModal
+
+sendImageModal :: Html ()
+sendImageModal = dialog_ [id_ "send-image-modal"] $
+  article_ $ do
+    header_ $ do
+      button_ [ariaLabel_ "Close", rel_ "prev", data_ "target" "send-image-modal", onclick_ "toggleModal(event)"] ""
+      h3_ "Send image"
+    form_ [id_ "image-message-form", wsSend_ "", hxVals_ "{\"type\": \"image-message\"}", handleImageMessageWSConfigSend] $
+      input_ [type_ "file", name_ "imageUpload", accept_ "image/*", autofocus_]
+    footer_ $ do
+      button_
+        [ role_ "button"
+        , class_ "secondary"
+        , data_ "target" "send-image-modal"
+        , onclick_ "toggleModal(event)"
+        ]
+        "Cancel"
+      button_
+        [ id_ "send-image-submit-button"
+        , type_ "submit"
+        , form_ "image-message-form"
+        , data_ "target" "send-image-modal"
+        , onclick_ "toggleModal(event)"
+        ]
+        "Confirm"
 
 initScript :: Html ()
 initScript =
@@ -138,15 +172,12 @@ on click writeText('{s}') into the navigator's clipboard
   set @data-tooltip to '{tooltip}'
 |]
 
-handleWSMessages :: Attribute
-handleWSMessages =
+handleWSAfterMessage :: Attribute
+handleWSAfterMessage =
   hyper_
     [qc|
 on htmx:wsAfterMessage
   call handleIncomingWSMessage(event.detail.message)
-
-on htmx:wsAfterSend
-  call handleOutgoingWSMessage(event.detail.message)
 |]
 
 handleWSClose :: Attribute
@@ -206,4 +237,12 @@ on keydown[(key is 'Enter') and ctrlKey]
 on submit from #message-form
   set my.value to ''
   {autoresizeMessageInput}
+|]
+
+handleImageMessageWSConfigSend :: Attribute
+handleImageMessageWSConfigSend =
+  hyper_
+    [qc|
+on htmx:wsConfigSend
+  call handleImageMessageWSConfigSend(event)
 |]

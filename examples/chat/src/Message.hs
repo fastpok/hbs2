@@ -16,6 +16,7 @@ import Codec.Serialise
 import Data.Attoparsec.Text (Parser)
 import Data.Attoparsec.Text qualified as Atto
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy qualified as BSL
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -109,7 +110,14 @@ specialMessageParser = do
     else return $ SpecialMessageSetName strippedArg
 
 parseSpecialMessage :: ByteString -> Maybe SpecialMessage
-parseSpecialMessage message =
-  eitherToMaybe $
-    Atto.parseOnly specialMessageParser $
-      TE.decodeUtf8 message
+parseSpecialMessage message = case deserialiseMessageData message of
+  WSMessageText (WSTextMessage text) -> eitherToMaybe $ Atto.parseOnly specialMessageParser text
+  WSMessageImage _ -> Nothing
+
+deserialiseMessageData :: ByteString -> WSMessage
+deserialiseMessageData messageDataBS =
+  case deserialiseOrFail $ BSL.fromStrict messageDataBS of
+    -- old message format was plain UTF8 text
+    Left (DeserialiseFailure _ _) -> do
+      WSMessageText $ WSTextMessage $ TE.decodeUtf8 messageDataBS
+    Right message -> message

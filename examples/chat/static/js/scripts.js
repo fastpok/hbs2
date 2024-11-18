@@ -91,13 +91,34 @@ function getOutgoingWSMessageType(message) {
   return messageObject.type;
 }
 
-function handleOutgoingWSMessage(message) {
-  const messageType = getOutgoingWSMessageType(message);
-  switch (messageType) {
-    case "message":
-      handleMessage();
-      break;
-  }
+async function handleImageMessageWSConfigSend(event) {
+  // Unfortunately, there is no such event for websockets as htmx:confirm, so we use black magic here
+  // https://htmx.org/events/#htmx:confirm
+  event.preventDefault();
+  const newImageMessageBody = await getNewImageMessageBody(
+    event.detail.parameters
+  );
+  event.detail.socketWrapper.send(newImageMessageBody, event.detail.elt);
 }
 
-function handleMessage(message) {}
+async function getNewImageMessageBody(eventParams) {
+  const messageContent = await readFileAsDataURL(eventParams.imageUpload);
+  const newMessageBody = {
+    type: eventParams.type,
+    message: messageContent,
+  };
+  return JSON.stringify(newMessageBody);
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(reader.result);
+    };
+    reader.onerror = () => {
+      reject(new Error("Failed to read the file"));
+    };
+    reader.readAsDataURL(file);
+  });
+}
