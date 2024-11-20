@@ -1,3 +1,5 @@
+/* Start tailwindcss like classes */
+
 .mb-0 {
   margin-bottom: 0;
 }
@@ -33,6 +35,34 @@
 .whitespace-nowrap {
   white-space: nowrap;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* End tailwindcss like classes */
 
 .header-color {
   color: var(--pico-h1-color);
@@ -305,4 +335,36 @@
   align-items: center;
   justify-content: center;
   padding: var(--pico-spacing);
+}
+
+.message-skeleton {
+  padding-top: calc(var(--pico-spacing) * 0.5);
+  padding-bottom: calc(var(--pico-spacing) * 0.5);
+}
+
+.message-skeleton-item {
+  background-color: var(--pico-color-grey-200);
+}
+
+[data-theme="dark"] .message-skeleton-item {
+  background-color: var(--pico-color-grey-700);
+}
+
+.message-skeleton-item.author {
+  height: 0.625rem;
+  border-radius: 0.3125rem;
+  width: 12rem;
+}
+
+.message-skeleton-item.datetime {
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  width: 8rem;
+}
+
+.message-skeleton-item.message {
+  margin-top: calc(var(--pico-spacing) * 0.5);
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  max-width: 20rem;
 }
