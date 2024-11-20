@@ -87,7 +87,7 @@ createEncryptedMessage message sessionID = do
       sender = Right $ fromMySigil $ wsSessionClientSigil wsSession
       recipients = fromMyEncryptionPublicKey <$> refChanMembersReaders refChanMembers
       messageBS = BSL.toStrict $ serialise message
-  createMessage createMessageServices messageFlags Nothing sender recipients mempty messageBS
+  myCreateMessage createMessageServices messageFlags Nothing sender recipients mempty messageBS
 
 myWSApp :: WS.Connection -> AppM ()
 myWSApp conn = do
@@ -115,9 +115,8 @@ getDecryptedMessageByMetadata :: (MonadReader Env m, MonadUnliftIO m) => Message
 getDecryptedMessageByMetadata MessageMetadata{..} = do
   storageAPI <- asks storageAPI
   let storage = AnyStorage (StorageClient storageAPI)
-      readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   encryptedMessage <- getMessageWait storage messageMetaHashRef
-  (_authorPublicKey, _messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
+  (_authorPublicKey, _messageContent, messageDataBS) <- myReadMessage encryptedMessage
   maybeUsername <- withDB $ selectUsername messageMetaAuthor messageMetaChat
   pure $
     DecryptedMessage

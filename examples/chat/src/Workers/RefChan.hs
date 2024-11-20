@@ -13,7 +13,6 @@ import Error
 import HBS2.Data.Detect
 import HBS2.Data.Types
 import HBS2.Data.Types.SignedBox
-import HBS2.KeyMan.Keys.Direct
 import HBS2.Merkle
 import HBS2.Net.Auth.Credentials hiding (encode)
 import HBS2.Net.Proto.Notify
@@ -67,9 +66,8 @@ syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
   chatEventsChan' <- asks chatEventsChan
   allChatMessages <- getAllChatMessagesFromRefChan refChan
-  let readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   forM_ allChatMessages $ \(hashRef, encryptedMessage) -> do
-    (authorPublicKey, messageContent, messageDataBS) <- readMessage readMessageServices encryptedMessage
+    (authorPublicKey, messageContent, messageDataBS) <- myReadMessage encryptedMessage
     let authorPublicKey' = MyPublicKey authorPublicKey
         createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
         messageMetadata =
