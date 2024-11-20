@@ -22,6 +22,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time
 import Data.Time.Clock.POSIX
+import HBS2.KeyMan.Keys.Direct
 import HBS2.Prelude
 import HBS2.Storage
 import Lens.Micro.Mtl
@@ -31,7 +32,7 @@ import UnliftIO
 getUTCTimeFromMessageTimestamp :: MessageTimestamp -> UTCTime
 getUTCTimeFromMessageTimestamp (MessageTimestamp createdAt) = posixSecondsToUTCTime $ realToFrac createdAt
 
-createMessage ::
+myCreateMessage ::
   forall s m.
   (MonadUnliftIO m, s ~ HBS2Basic) =>
   CreateMessageServices s ->
@@ -46,7 +47,7 @@ createMessage ::
   -- | payload
   ByteString ->
   m (Message s)
-createMessage CreateMessageServices{..} flags gks sender' rcpts' parts bs = do
+myCreateMessage CreateMessageServices{..} flags gks sender' rcpts' parts bs = do
   (senderSignKey, senderEncryptionKey) <- getSenderKeys
 
   gk <- generateGroupKey @s gks (senderEncryptionKey : rcpts')
@@ -121,3 +122,20 @@ deserialiseMessageData messageDataBS =
     Left (DeserialiseFailure _ _) -> do
       WSMessageText $ WSTextMessage $ TE.decodeUtf8 messageDataBS
     Right message -> message
+
+myReadMessage ::
+  forall s m.
+  ( MonadUnliftIO m
+  , s ~ HBS2Basic
+  ) =>
+  Message s ->
+  m (PubKey 'Sign s, MessageContent s, ByteString)
+myReadMessage message = do
+  let readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
+  result <- try $ readMessage readMessageServices message
+  case result of
+    Left ReadNoGroupKeyAccess -> do
+      pause @'Seconds 0.1
+      myReadMessage message
+    Left e -> throwIO e
+    Right y -> pure y
