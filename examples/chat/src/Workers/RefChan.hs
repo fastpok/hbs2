@@ -6,6 +6,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import DB
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.HashSet qualified as HS
 import Env
@@ -40,58 +41,80 @@ refChanWorker = do
       pure ()
     someRefChans -> do
       chatEventsChan' <- asks chatEventsChan
-      sink <- asks refChanNotifySink
-      notifyWorkers <- forM someRefChans \refChan -> async do
-        let refChanKey = namedRefChanKey refChan
-        runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChanKey) $ \case
-          RefChanUpdated _ _ -> do
-            syncDBWithRefChan refChanKey
-            atomically $ writeTChan chatEventsChan' $ MessagesEvent refChanKey
-          RefChanHeadUpdated _ _ newRefChanHeadHashRef -> do
-            newRefChanHead <- readRefChanHead newRefChanHeadHashRef >>= orThrow (ServerError "can't request refchan head")
-            let refChanMembers = getRefChanHeadMembers newRefChanHead
-            wsMembers <- getWSMembersFromRefChanMembers refChanMembers refChanKey
-            atomically $
-              writeTChan chatEventsChan' $
-                MembersEvent
-                  { membersEventRefChan = refChanKey
-                  , membersEventAuthors = wsMembersAuthors wsMembers
-                  , membersEventReaders = wsMembersReaders wsMembers
-                  }
-            pure ()
-          _ -> pure ()
+      notifyWorkers <-
+        concat <$> forM someRefChans \namedRefChan -> do
+          let refChan = namedRefChanKey namedRefChan
+          refChanEventHandlerAsync <- async do
+            sink <- asks refChanNotifySink
+            runNotifySink sink (RefChanNotifyKey $ fromMyPublicKey refChan) $ \case
+              RefChanHeadUpdated _refChan _oldRefChanHeadHashRef newRefChanHeadHashRef -> do
+                newRefChanHead <-
+                  readRefChanHead newRefChanHeadHashRef
+                    >>= orThrow (ServerError "can't request refchan head")
+                let refChanMembers = getRefChanHeadMembers newRefChanHead
+                wsMembers <- getWSMembersFromRefChanMembers refChanMembers refChan
+                atomically $
+                  writeTChan chatEventsChan' $
+                    MembersEvent
+                      { membersEventRefChan = refChan
+                      , membersEventAuthors = wsMembersAuthors wsMembers
+                      , membersEventReaders = wsMembersReaders wsMembers
+                      }
+                pure ()
+              _ -> pure ()
+          refChanTxEventHandlerAsync <- async do
+            sink <- asks refChanTxNotifySink
+            runNotifySink sink (RefChanTxNotifyKey $ fromMyPublicKey refChan) $ \case
+              RefChanTxNotifyData _refChan tx -> case unpackTx tx of
+                Nothing -> pure ()
+                Just messageHashRef -> do
+                  processMessage refChan messageHashRef
+                  atomically $ writeTChan chatEventsChan' $ MessagesEvent refChan
+          pure [refChanEventHandlerAsync, refChanTxEventHandlerAsync]
       void $ waitAnyCancel notifyWorkers
+
+unpackTx :: SignedBox ByteString (Encryption L4Proto) -> Maybe MyHashRef
+unpackTx tx = do
+  (_authorKey, bs) <- unboxSignedBox0 tx
+  AnnotatedHashRef _ (HashRef messageHashRef) <- eitherToMaybe $ deserialiseOrFail $ BSL.fromStrict bs
+  pure $ MyHashRef messageHashRef
+
+processMessage :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> MyHashRef -> m ()
+processMessage refChan messageHashRef = do
+  storageAPI <- asks storageAPI
+  let storage = AnyStorage (StorageClient storageAPI)
+  encryptedMessage <- liftIO $ getMessageWait storage messageHashRef
+  (authorPublicKey, messageContent, messageDataBS) <- myReadMessage encryptedMessage
+  let authorPublicKey' = MyPublicKey authorPublicKey
+      createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
+      messageMetadata =
+        MessageMetadata
+          { messageMetaHashRef = messageHashRef
+          , messageMetaChat = refChan
+          , messageMetaAuthor = authorPublicKey'
+          , messageMetaCreatedAt = createdAt
+          }
+  withDB $ insertMessageMetadata messageMetadata
+  case parseSpecialMessage messageDataBS of
+    Just (SpecialMessageSetName username) -> do
+      nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
+      when nameUpdated do
+        chatEventsChan' <- asks chatEventsChan
+        atomically $
+          writeTChan chatEventsChan' $
+            NameEvent
+              { nameEventRefChan = refChan
+              , nameEventUserKey = authorPublicKey'
+              , nameEventUserName = username
+              }
+    Nothing -> pure ()
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
-  chatEventsChan' <- asks chatEventsChan
   allChatMessages <- getAllChatMessagesFromRefChan refChan
-  forM_ allChatMessages $ \(hashRef, encryptedMessage) -> do
-    (authorPublicKey, messageContent, messageDataBS) <- myReadMessage encryptedMessage
-    let authorPublicKey' = MyPublicKey authorPublicKey
-        createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
-        messageMetadata =
-          MessageMetadata
-            { messageMetaHashRef = hashRef
-            , messageMetaChat = refChan
-            , messageMetaAuthor = authorPublicKey'
-            , messageMetaCreatedAt = createdAt
-            }
-    withDB $ insertMessageMetadata messageMetadata
-    case parseSpecialMessage messageDataBS of
-      Just (SpecialMessageSetName username) -> do
-        nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
-        when nameUpdated $
-          atomically $
-            writeTChan chatEventsChan' $
-              NameEvent
-                { nameEventRefChan = refChan
-                , nameEventUserKey = authorPublicKey'
-                , nameEventUserName = username
-                }
-      Nothing -> pure ()
+  forM_ allChatMessages (processMessage refChan)
 
-getAllChatMessagesFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m [(MyHashRef, EncryptedMessage)]
+getAllChatMessagesFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m [MyHashRef]
 getAllChatMessagesFromRefChan refChan = do
   refChanAPI <- asks refChanAPI
   storageAPI <- asks storageAPI
@@ -112,15 +135,10 @@ getAllChatMessagesFromRefChan refChan = do
         case s of
           Accept{} -> pure ()
           Propose _ box -> do
-            -- is this really peer's key ?
-            (_peerKey, ProposeTran _ pbox :: ProposeTran L4Proto) <- toMPlus $ unboxSignedBox0 box
-            -- is this really author's key ?
-            (_authorKey, bs) <- toMPlus $ unboxSignedBox0 pbox
-            case deserialiseOrFail $ BSL.fromStrict bs of
-              Left _ -> pure ()
-              Right (AnnotatedHashRef _ (HashRef msgHashRef)) -> do
-                encryptedMessage <- liftIO $ getMessageWait storage (MyHashRef msgHashRef)
-                lift $ S.yield (MyHashRef msgHashRef, encryptedMessage)
+            (_peerKey, ProposeTran _ tx :: ProposeTran L4Proto) <- toMPlus $ unboxSignedBox0 box
+            case unpackTx tx of
+              Nothing -> pure ()
+              Just messageHashRef -> lift $ S.yield messageHashRef
 
 readRefChanHead :: (MonadUnliftIO m, MonadReader Env m) => HashRef -> m (Maybe (RefChanHeadBlock L4Proto))
 readRefChanHead refChanHeadHashRef = do

@@ -30,6 +30,7 @@ data Env = Env
   , storageAPI :: ServiceCaller StorageAPI UNIX
   , rpcSockPath :: FilePath
   , refChanNotifySink :: NotifySink (RefChanEvents L4Proto) UNIX
+  , refChanTxNotifySink :: NotifySink (RefChanTxEvents L4Proto) UNIX
   , dbEnv :: DBPipeEnv
   , staticPath :: FilePath
   , wsSessionsTVar :: TVar (Map WSSessionID WSSession)
@@ -47,6 +48,7 @@ initEnv config = do
   wsSessionsTVar <- newTVarIO Map.empty
   chatEventsChan <- newBroadcastTChanIO
   refChanNotifySink <- newNotifySink
+  refChanTxNotifySink <- newNotifySink
   pure $ Env{..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv

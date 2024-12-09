@@ -19,26 +19,39 @@ dbWorker = do
 
 runWorkers :: (MonadReader Env m, MonadUnliftIO m) => m [Async ()]
 runWorkers = do
-  dbWorker' <- async dbWorker
-  webWorker' <- async $ webWorker
   rpcSockPath' <- asks rpcSockPath
+
+  dbWorkerAsync <- async dbWorker
+  webWorkerAsync <- async webWorker
+
   client <- newMessagingUnix False 1.0 rpcSockPath'
-  messagingUnix <- async $ runMessagingUnix client
-  serviceClientWorker' <- async $ serviceClientWorker client
+  messagingUnixAsync <- async $ runMessagingUnix client
+  serviceClientWorkerAsync <- async $ serviceClientWorker client
+
   refChanNotifyClient <- newMessagingUnix False 1.0 rpcSockPath'
-  refChanNotifyMessagingUnix <- async $ runMessagingUnix refChanNotifyClient
-  refChanNotifyClientWorker' <- async $ refChanNotifyClientWorker refChanNotifyClient
-  refChanNotifyWorker' <- async $ refChanNotifyWorker refChanNotifyClient
-  refChanWorker' <- async refChanWorker
+  refChanNotifyMessagingUnixAsync <- async $ runMessagingUnix refChanNotifyClient
+  refChanNotifyProtoWorkerAsync <- async $ refChanNotifyProtoWorker refChanNotifyClient
+  refChanNotifyClientWorkerAsync <- async $ refChanNotifyClientWorker refChanNotifyClient
+
+  refChanTxNotifyClient <- newMessagingUnix False 1.0 rpcSockPath'
+  refChanTxNotifyMessagingUnixAsync <- async $ runMessagingUnix refChanTxNotifyClient
+  refChanTxNotifyProtoWorkerAsync <- async $ refChanTxNotifyProtoWorker refChanTxNotifyClient
+  refChanTxNotifyClientWorkerAsync <- async $ refChanTxNotifyClientWorker refChanTxNotifyClient
+
+  refChanWorkerAsync <- async refChanWorker
+
   pure
-    [ dbWorker',
-      webWorker',
-      messagingUnix,
-      refChanNotifyMessagingUnix,
-      serviceClientWorker',
-      refChanNotifyClientWorker',
-      refChanNotifyWorker',
-      refChanWorker'
+    [ dbWorkerAsync
+    , webWorkerAsync
+    , messagingUnixAsync
+    , serviceClientWorkerAsync
+    , refChanNotifyMessagingUnixAsync
+    , refChanNotifyProtoWorkerAsync
+    , refChanNotifyClientWorkerAsync
+    , refChanTxNotifyMessagingUnixAsync
+    , refChanTxNotifyProtoWorkerAsync
+    , refChanTxNotifyClientWorkerAsync
+    , refChanWorkerAsync
     ]
 
 serviceClientWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
@@ -46,21 +59,35 @@ serviceClientWorker client = do
   refChanAPI' <- asks refChanAPI
   storageAPI' <- asks storageAPI
   let endpoints =
-        [ Endpoint @UNIX refChanAPI',
-          Endpoint @UNIX storageAPI'
+        [ Endpoint @UNIX refChanAPI'
+        , Endpoint @UNIX storageAPI'
         ]
   liftIO $ runReaderT (runServiceClientMulti endpoints) client
 
-refChanNotifyClientWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
-refChanNotifyClientWorker client = do
+refChanNotifyProtoWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
+refChanNotifyProtoWorker client = do
   sink <- asks refChanNotifySink
   liftIO $ flip runReaderT client $ do
     runProto @UNIX
       [ makeResponse (makeNotifyClient sink)
       ]
 
-refChanNotifyWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
-refChanNotifyWorker client = do
+refChanNotifyClientWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
+refChanNotifyClientWorker client = do
   sink <- asks refChanNotifySink
+  liftIO $ flip runReaderT client $ do
+    runNotifyWorkerClient sink
+
+refChanTxNotifyProtoWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
+refChanTxNotifyProtoWorker client = do
+  sink <- asks refChanTxNotifySink
+  liftIO $ flip runReaderT client $ do
+    runProto @UNIX
+      [ makeResponse (makeNotifyClient sink)
+      ]
+
+refChanTxNotifyClientWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()
+refChanTxNotifyClientWorker client = do
+  sink <- asks refChanTxNotifySink
   liftIO $ flip runReaderT client $ do
     runNotifyWorkerClient sink
