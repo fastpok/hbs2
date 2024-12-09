@@ -793,6 +793,7 @@ runPeer opts = respawnOnError opts $ do
 
 
   refChanNotifySource <- newSomeNotifySource @(RefChanEvents L4Proto)
+  refChanTxNotifySource <- newSomeNotifySource @(RefChanTxEvents L4Proto)
   refLogNotifySource  <- newSomeNotifySource @(RefLogEvents L4Proto)
 
   let ps = mempty
@@ -953,7 +954,7 @@ runPeer opts = respawnOnError opts $ do
     pause @'Seconds 600
     liftIO $ Cache.purgeExpired nbcache
 
-  rce <- refChanWorkerEnv conf penv refChanNotifySource
+  rce <- refChanWorkerEnv conf penv refChanNotifySource refChanTxNotifySource
 
   rcwProbe <- newSimpleProbe "RefChanWorker"
   addProbe rcwProbe
@@ -1355,9 +1356,11 @@ runPeer opts = respawnOnError opts $ do
 
   rpcProto <- async $ flip runReaderT rpcctx do
     env <- newNotifyEnvServer @(RefChanEvents L4Proto) refChanNotifySource
+    envTx <- newNotifyEnvServer @(RefChanTxEvents L4Proto) refChanTxNotifySource
     envrl <- newNotifyEnvServer @(RefLogEvents L4Proto) refLogNotifySource
     w1 <- asyncLinked $ runNotifyWorkerServer env
-    w2 <- asyncLinked $ runNotifyWorkerServer envrl
+    w2 <- asyncLinked $ runNotifyWorkerServer envTx
+    w3 <- asyncLinked $ runNotifyWorkerServer envrl
     wws <- replicateM 1 $ async $ runProto @UNIX
       [ makeResponse (makeServer @PeerAPI)
       , makeResponse (makeServer @RefLogAPI)
@@ -1366,9 +1369,10 @@ runPeer opts = respawnOnError opts $ do
       , makeResponse (makeServer @LWWRefAPI)
       , makeResponse (makeServer @MailboxAPI)
       , makeResponse (makeNotifyServer @(RefChanEvents L4Proto) env)
+      , makeResponse (makeNotifyServer @(RefChanTxEvents L4Proto) envTx)
       , makeResponse (makeNotifyServer @(RefLogEvents L4Proto) envrl)
       ]
-    void $ waitAnyCancel (w1 : w2 : wws )
+    void $ waitAnyCancel (w1 : w2 : w3: wws )
 
   void $ waitAnyCancel $ w <> [ loop
                               , m1
