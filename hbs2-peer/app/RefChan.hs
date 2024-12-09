@@ -56,6 +56,7 @@ import Data.HashSet qualified as HashSet
 import Data.Heap ()
 import Data.List qualified as List
 import Data.Maybe
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Text qualified as Text
 import Lens.Micro.Platform
@@ -92,6 +93,7 @@ data RefChanWorkerEnv e =
   , _refChanPeerEnv               :: PeerEnv e
   , _refChanWorkerEnvDEnv         :: DownloadEnv e
   , _refChanNotifySource          :: SomeNotifySource (RefChanEvents e)
+  , _refChanTxNotifySource        :: SomeNotifySource (RefChanTxEvents e)
   , _refChanWorkerEnvHeadQ        :: TQueue (RefChanId e, RefChanHeadBlockTran e)
   , _refChanWorkerEnvDownload     :: TVar (HashMap HashRef (RefChanId e, (TimeSpec, OnDownloadComplete)))
   , _refChanWorkerEnvNotify       :: TVar (HashMap (RefChanId e) ())
@@ -114,10 +116,11 @@ refChanWorkerEnv :: forall m e . (MonadIO m, ForRefChans e)
                  -> PeerEnv e
                  -> DownloadEnv e
                  -> SomeNotifySource (RefChanEvents e)
+                 -> SomeNotifySource (RefChanTxEvents e)
                  -> m (RefChanWorkerEnv e)
 
-refChanWorkerEnv conf pe de nsource =
-  liftIO $ RefChanWorkerEnv @e conf pe de nsource
+refChanWorkerEnv conf pe de nsource nTxSource =
+  liftIO $ RefChanWorkerEnv @e conf pe de nsource nTxSource
     <$> newTQueueIO
     <*> newTVarIO mempty
     <*> newTVarIO mempty
@@ -656,11 +659,11 @@ refChanWorker env@RefChanWorkerEnv{..} brains = do
           case upd of
             Propose chan box -> do
               lift $ tryDownloadContent env chan box
-              pure (RefChanLogKey @(Encryption e) chan, h)
+              pure (RefChanLogKey @(Encryption e) chan, h, Just box)
 
-            Accept chan _  -> pure (RefChanLogKey @(Encryption e) chan, h)
+            Accept chan _  -> pure (RefChanLogKey @(Encryption e) chan, h, Nothing)
 
-        let byChan = HashMap.fromListWith (<>) [ (x, [y]) | (x,y) <- catMaybes trans ]
+        let byChan = HashMap.fromListWith (<>) [ (x, [(y,z)]) | (x,y,z) <- catMaybes trans ]
 
         -- FIXME: thread-num-hardcode-to-remove
         pooledForConcurrentlyN_ 4 (HashMap.toList byChan) $ \(c,new) -> do
@@ -668,12 +671,13 @@ refChanWorker env@RefChanWorkerEnv{..} brains = do
 
           hashes <- maybe1 mbLog (pure mempty) $ readLog (getBlock sto) . HashRef
 
+          let (newHashes, maybeNewTxBoxes) = unzip new
           -- FIXME: might-be-problems-on-large-logs
-          let hashesNew = HashSet.fromList (hashes <> new) & HashSet.toList
+          let uniqueHashesNew = HashSet.fromList (hashes <> newHashes) & HashSet.toList
 
           -- FIXME: remove-chunk-num-hardcode
           --   $class: hardcode
-          let pt = toPTree (MaxSize 256) (MaxNum 256) hashesNew
+          let pt = toPTree (MaxSize 256) (MaxNum 256) uniqueHashesNew
 
           nref <- makeMerkle 0 pt $ \(_,_,bss) -> void $ liftIO $ putBlock sto bss
 
@@ -682,6 +686,12 @@ refChanWorker env@RefChanWorkerEnv{..} brains = do
 
           updateRef sto c nref
           notifyOnRefChanUpdated env c nref
+
+          -- emit notifications about new transactions
+          forM_ maybeNewTxBoxes \mTxBox -> runMaybeT do
+            txBox <- MaybeT $ pure mTxBox
+            (_pk, ProposeTran _headRef pbox) <- MaybeT $ pure $ unboxSignedBox0 txBox
+            liftIO $ notifyOnRefChanTx env c pbox
 
     refChanPoll penv = withPeerM penv do
 
@@ -927,6 +937,7 @@ logMergeProcess penv env q = withPeerM penv do
 
         let mergeList = HashSet.toList mergeSet
 
+        -- FIXME: it seems that nothing is ever written to this queue
         downQ <- newTQueueIO
 
         -- если какие-то транзакции отсутствуют - пытаемся их скачать
@@ -1026,3 +1037,20 @@ notifyOnRefChanUpdated RefChanWorkerEnv{..} c nref = do
     notification =
        (RefChanNotifyKey (coerce c), RefChanUpdated (coerce c) (HashRef nref))
 
+
+notifyOnRefChanTx ::
+  forall e s m.
+  ( ForRefChans e
+  , s ~ Encryption e
+  , MonadUnliftIO m
+  ) =>
+  RefChanWorkerEnv e ->
+  RefChanLogKey s ->
+  SignedBox ByteString (Encryption e) ->
+  m ()
+notifyOnRefChanTx RefChanWorkerEnv{..} c tx = do
+    emitNotify _refChanTxNotifySource notification
+    debug $ "REFCHAN TX:" <+> pretty c
+  where
+    notification =
+       (RefChanTxNotifyKey (coerce c), RefChanTxNotifyData (coerce c) tx)

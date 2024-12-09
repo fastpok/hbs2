@@ -1,6 +1,7 @@
 {-# Language UndecidableInstances #-}
 module HBS2.Peer.Notify
   ( RefChanEvents(..)
+  , RefChanTxEvents(..)
   , RefLogEvents(..)
   , newNotifyEnvServer
   , runNotifyWorkerServer
@@ -60,6 +61,30 @@ data instance NotifyData (RefChanEvents e) =
 
 instance ForRefChans e => Serialise (NotifyKey (RefChanEvents e))
 instance ForRefChans e => Serialise (NotifyData (RefChanEvents e))
+
+data RefChanTxEvents e = RefChanTxEvents
+
+instance HasProtocol UNIX  (NotifyProto (RefChanTxEvents L4Proto) UNIX) where
+  type instance ProtocolId (NotifyProto (RefChanTxEvents L4Proto) UNIX) = 0x20e14bfa0ca1db8f
+  type instance Encoded UNIX = ByteString
+  decode = either (const Nothing) Just . deserialiseOrFail
+  encode = serialise
+  requestPeriodLim = NoLimit
+
+-- FIXME: move-this-definitions-somewhere
+newtype instance NotifyKey (RefChanTxEvents e) =
+  RefChanTxNotifyKey (RefChanId e)
+  deriving (Generic)
+
+deriving newtype instance ForRefChans e => Hashable (NotifyKey (RefChanTxEvents e))
+deriving newtype instance ForRefChans e => Eq (NotifyKey (RefChanTxEvents e))
+
+data instance NotifyData (RefChanTxEvents e) =
+  RefChanTxNotifyData (RefChanId e) (SignedBox BS.ByteString (Encryption e))
+  deriving Generic
+
+instance ForRefChans e => Serialise (NotifyKey (RefChanTxEvents e))
+instance ForRefChans e => Serialise (NotifyData (RefChanTxEvents e))
 
 data RefLogEvents s =
   RefLogUpdated
