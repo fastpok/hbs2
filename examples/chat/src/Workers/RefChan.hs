@@ -68,8 +68,13 @@ refChanWorker = do
               RefChanTxNotifyData _refChan tx -> case unpackTx tx of
                 Nothing -> pure ()
                 Just messageHashRef -> do
-                  processMessage refChan messageHashRef
-                  atomically $ writeTChan chatEventsChan' $ MessagesEvent refChan
+                  decryptedMessage <- processMessage refChan messageHashRef
+                  atomically $
+                    writeTChan chatEventsChan' $
+                      MessageEvent
+                        { messageEventRefChan = refChan
+                        , messageEventMessage = decryptedMessage
+                        }
           pure [refChanEventHandlerAsync, refChanTxEventHandlerAsync]
       void $ waitAnyCancel notifyWorkers
 
@@ -79,7 +84,7 @@ unpackTx tx = do
   AnnotatedHashRef _ (HashRef messageHashRef) <- eitherToMaybe $ deserialiseOrFail $ BSL.fromStrict bs
   pure $ MyHashRef messageHashRef
 
-processMessage :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> MyHashRef -> m ()
+processMessage :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> MyHashRef -> m DecryptedMessage
 processMessage refChan messageHashRef = do
   storageAPI <- asks storageAPI
   let storage = AnyStorage (StorageClient storageAPI)
@@ -108,6 +113,16 @@ processMessage refChan messageHashRef = do
               , nameEventUserName = username
               }
     Nothing -> pure ()
+  maybeUsername <- withDB $ selectUsername authorPublicKey' refChan
+  pure $
+    DecryptedMessage
+      { decryptedMessageHashRef = messageHashRef
+      , decryptedMessageAuthorKey = authorPublicKey'
+      , decryptedMessageAuthorName = maybeUsername
+      , decryptedMessageChat = refChan
+      , decryptedMessageCreatedAt = createdAt
+      , decryptedMessageBody = deserialiseMessageData messageDataBS
+      }
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
