@@ -387,7 +387,10 @@ instance ToHtml WSName where
   toHtmlRaw = toHtml
 
 data ChatEvent
-  = MessagesEvent MyRefChan
+  = MessageEvent
+      { messageEventRefChan :: MyRefChan
+      , messageEventMessage :: DecryptedMessage
+      }
   | MembersEvent
       { membersEventRefChan :: MyRefChan
       , membersEventAuthors :: [AuthorMember]

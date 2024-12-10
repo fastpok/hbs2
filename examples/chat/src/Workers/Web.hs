@@ -195,21 +195,18 @@ sendLoop conn sessionID = do
     case wsSessionActiveChat session of
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
-        MessagesEvent eventChat -> when (eventChat == activeChat) $ do
-          -- TODO: it would be nice not to get all the transactions from DB in the search for new ones
-          messageMeta <- withDB $ selectChatMessageMetadata pageSize Nothing activeChat
-          let newMessageMeta = filter (\meta -> Set.notMember (messageMetaHashRef meta) (wsSessionMessages session)) messageMeta
-          forM_ newMessageMeta \meta -> do
-            newMessage <- getDecryptedMessageByMetadata meta
+        MessageEvent{..} -> do
+          let isNewMessage = Set.notMember (decryptedMessageHashRef messageEventMessage) (wsSessionMessages session)
+          when (messageEventRefChan == activeChat && isNewMessage) $ do
             let sessionClientPublicKey = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil session
             liftIO $
               WS.sendTextData conn $
                 WSProtocolServerMessageNewMessage $
                   WSNewMessage
-                    { wsNewMessageMessage = newMessage
-                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthorKey newMessage
+                    { wsNewMessageMessage = messageEventMessage
+                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthorKey messageEventMessage
                     }
-            addSessionMessageHashRefs sessionID $ Set.singleton $ decryptedMessageHashRef newMessage
+            addSessionMessageHashRefs sessionID $ Set.singleton $ decryptedMessageHashRef messageEventMessage
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $
@@ -253,12 +250,6 @@ addWSSession wsSession = do
   wsSessionID <- liftIO UUID.nextRandom
   atomically $ modifyTVar wsSessionsTVar (Map.insert wsSessionID wsSession)
   pure wsSessionID
-
--- wsSessionExists :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m Bool
--- wsSessionExists wsSessionID = do
---   wsSessionsTVar <- asks wsSessionsTVar
---   wsSessionsTVar' <- readTVarIO wsSessionsTVar
---   pure $ Map.member wsSessionID wsSessionsTVar'
 
 removeWSSession :: (MonadReader Env m, MonadUnliftIO m) => WSSessionID -> m ()
 removeWSSession wsSessionID = do
