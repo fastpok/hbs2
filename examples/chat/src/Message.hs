@@ -113,14 +113,16 @@ specialMessageParser = do
 parseSpecialMessage :: ByteString -> Maybe SpecialMessage
 parseSpecialMessage message = case deserialiseMessageData message of
   WSMessageText (WSTextMessage text) -> eitherToMaybe $ Atto.parseOnly specialMessageParser text
-  WSMessageImage _ -> Nothing
+  _ -> Nothing
 
 deserialiseMessageData :: ByteString -> WSMessage
 deserialiseMessageData messageDataBS =
   case deserialiseOrFail $ BSL.fromStrict messageDataBS of
-    -- old message format was plain UTF8 text
     Left (DeserialiseFailure _ _) -> do
-      WSMessageText $ WSTextMessage $ TE.decodeUtf8 messageDataBS
+      -- old message format was plain UTF-8 text
+      case TE.decodeUtf8' messageDataBS of
+        Left _e -> WSUnknownMessage "failed to decode the message"
+        Right text -> WSMessageText $ WSTextMessage text
     Right message -> message
 
 myReadMessage ::

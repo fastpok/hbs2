@@ -165,7 +165,7 @@ receiveLoop conn sessionID = do
         members <- getWSMembersFromRefChan chat
         liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
       WSProtocolClientMessageTextMessage wsTextMessage -> handleNewMessage (WSMessageText wsTextMessage) sessionID
-      WSProtocolClientMessageImageMessage wsImageMessage -> handleNewMessage (WSMessageImage wsImageMessage) sessionID
+      WSProtocolClientMessageFilesMessage wsImageMessage -> handleNewMessage (WSMessageFiles wsImageMessage) sessionID
       WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
         wsSessionsTVar' <- asks wsSessionsTVar
         wsSessions <- readTVarIO wsSessionsTVar'

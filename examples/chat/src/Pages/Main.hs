@@ -45,6 +45,7 @@ htmlBody refChans' = body_
   , handleWSAfterMessage
   , handleWSClose
   , handleWSOpen
+  , handlePaste
   ]
   $ do
     initScript
@@ -97,41 +98,60 @@ htmlBody refChans' = body_
                     ]
                     ""
                   button_
-                    [ class_ "outline message-form-button send-image"
+                    [ class_ "outline message-form-button send-files"
                     , type_ "button"
-                    , data_ "target" "send-image-modal"
-                    , onclick_ "toggleModal(event)"
+                    , data_ "target" "send-files-modal"
+                    , onclick_ "toggleModal(event); document.getElementById('files-message-form').reset();"
                     ]
-                    $ makeIcon Photo
+                    $ makeIcon PaperClip
                   button_
                     [class_ "outline message-form-button send-message", type_ "submit"]
                     $ makeIcon PaperAirplane
       div_ [class_ "members-header wrapper-item header-color"] "Members"
       div_ [class_ "members wrapper-item", id_ "members"] ""
-      sendImageModal
+      sendFilesModal
 
-sendImageModal :: Html ()
-sendImageModal = dialog_ [id_ "send-image-modal"] $
+sendFilesModal :: Html ()
+sendFilesModal = dialog_ [id_ "send-files-modal"] $
   article_ $ do
     header_ $ do
-      button_ [ariaLabel_ "Close", rel_ "prev", data_ "target" "send-image-modal", onclick_ "toggleModal(event)"] ""
-      h3_ "Send image"
-    form_ [id_ "image-message-form", wsSend_ "", hxVals_ "{\"type\": \"image-message\"}", handleImageMessageWSConfigSend] $
-      input_ [type_ "file", name_ "imageUpload", accept_ "image/*", autofocus_]
+      button_
+        [ ariaLabel_ "Close"
+        , rel_ "prev"
+        , data_ "target" "send-files-modal"
+        , onclick_ "toggleModal(event)"
+        ]
+        ""
+      h3_ "Send files"
+    form_
+      [ id_ "files-message-form"
+      , wsSend_ ""
+      , hxVals_ "{\"type\": \"files-message\"}"
+      , data_ "target" "send-files-modal"
+      , onsubmit_ "toggleModal(event)"
+      , handleFilesMessageWSConfigSend
+      ]
+      $ input_
+        [ id_ "files-input"
+        , type_ "file"
+        , name_ "filesUpload"
+        , multiple_ ""
+        , required_ ""
+        , autofocus_
+        ]
     footer_ $ do
       button_
         [ role_ "button"
         , class_ "secondary"
-        , data_ "target" "send-image-modal"
+        , data_ "target" "send-files-modal"
         , onclick_ "toggleModal(event)"
         ]
         "Cancel"
       button_
-        [ id_ "send-image-submit-button"
+        [ id_ "send-files-submit-button"
         , type_ "submit"
-        , form_ "image-message-form"
-        , data_ "target" "send-image-modal"
-        , onclick_ "toggleModal(event)"
+        , form_ "files-message-form"
+        , data_ "target" "send-files-modal"
         ]
         "Confirm"
 
@@ -158,6 +178,7 @@ on click
   add .hidden to #chat-placeholder
   remove .hidden from #chat
   set #chat-name.innerText to my.innerText
+  set $activeChatSelected to true
 |]
 
 onClickCopy :: Text -> Text -> Attribute
@@ -170,6 +191,16 @@ on click writeText('{s}') into the navigator's clipboard
   wait 2s
   set my innerHTML to '{getIconSvg Copy}'
   set @data-tooltip to '{tooltip}'
+|]
+
+handlePaste :: Attribute
+handlePaste =
+  hyper_
+    [qc|
+on paste
+  if $activeChatSelected 
+    call handlePaste(event)
+  end
 |]
 
 handleWSAfterMessage :: Attribute
@@ -194,6 +225,7 @@ on htmx:wsClose or htmx:wsError
   set #chat-name.innerText to ''
   set #ws-connection-status-text.innerText to 'offline'
   add .offline to #ws-connection-status
+  set $activeChatSelected to false
 |]
 
 handleWSOpen :: Attribute
@@ -239,10 +271,10 @@ on submit from #message-form
   {autoresizeMessageInput}
 |]
 
-handleImageMessageWSConfigSend :: Attribute
-handleImageMessageWSConfigSend =
+handleFilesMessageWSConfigSend :: Attribute
+handleFilesMessageWSConfigSend =
   hyper_
     [qc|
 on htmx:wsConfigSend
-  call handleImageMessageWSConfigSend(event)
+  call handleFilesMessageWSConfigSend(event)
 |]
