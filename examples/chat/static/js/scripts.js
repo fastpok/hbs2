@@ -91,21 +91,29 @@ function getOutgoingWSMessageType(message) {
   return messageObject.type;
 }
 
-async function handleImageMessageWSConfigSend(event) {
-  // Unfortunately, there is no such event for websockets as htmx:confirm, so we use black magic here
-  // https://htmx.org/events/#htmx:confirm
+async function handleFilesMessageWSConfigSend(event) {
+  // Unfortunately, there is no such event for websockets as htmx:confirm (https://htmx.org/events/#htmx:confirm),
+  // so we cancel event and call socketWrapper.send manually
   event.preventDefault();
-  const newImageMessageBody = await getNewImageMessageBody(
+  const newFilesMessageBody = await getNewFilesMessageBody(
     event.detail.parameters
   );
-  event.detail.socketWrapper.send(newImageMessageBody, event.detail.elt);
+  event.detail.socketWrapper.send(newFilesMessageBody, event.detail.elt);
 }
 
-async function getNewImageMessageBody(eventParams) {
-  const messageContent = await readFileAsDataURL(eventParams.imageUpload);
+async function getNewFilesMessageBody(eventParams) {
+  const files = eventParams.filesUpload;
+  let newMessage;
+  const readFilePromises = [];
+  if (Array.isArray(files)) {
+    files.forEach((file) => readFilePromises.push(readFileAsDataURL(file)));
+    newMessage = await Promise.all(readFilePromises);
+  } else {
+    newMessage = [await readFileAsDataURL(files)];
+  }
   const newMessageBody = {
     type: eventParams.type,
-    message: messageContent,
+    message: newMessage,
   };
   return JSON.stringify(newMessageBody);
 }
@@ -114,11 +122,29 @@ function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      resolve(reader.result);
+      const result = {
+        dataURL: reader.result,
+        filename: file.name,
+      };
+      resolve(result);
     };
     reader.onerror = () => {
       reject(new Error("Failed to read the file"));
     };
     reader.readAsDataURL(file);
   });
+}
+
+function handlePaste(event) {
+  const files = event.clipboardData.files;
+  if (files.length > 0) {
+    document.getElementById("files-message-form").reset();
+    const filesInput = document.getElementById("files-input");
+    filesInput.files = files;
+    const filesInputModal = document.getElementById("send-files-modal");
+    if (!filesInputModal.open) {
+      openModal(filesInputModal);
+      document.getElementById("send-files-submit-button").focus();
+    }
+  }
 }

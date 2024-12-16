@@ -1,10 +1,12 @@
 module Types where
 
 import Codec.Serialise
+import Control.Applicative
 import DBPipe.SQLite
 import Data.Aeson hiding (encode, json)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (Parser)
+import Data.Attoparsec.Text qualified as Atto
 import Data.List qualified as L
 import Data.Maybe
 import Data.Set (Set)
@@ -156,7 +158,7 @@ data WSProtocolClientMessage
   = WSProtocolClientMessageHello WSHello
   | WSProtocolClientMessageActiveChat WSActiveChat
   | WSProtocolClientMessageTextMessage WSTextMessage
-  | WSProtocolClientMessageImageMessage WSImageMessage
+  | WSProtocolClientMessageFilesMessage WSFilesMessage
   | WSProtocolClientMessageGetMessages WSGetMessages
 
 instance FromJSON WSProtocolClientMessage where
@@ -166,7 +168,7 @@ instance FromJSON WSProtocolClientMessage where
       "hello" -> WSProtocolClientMessageHello <$> parseJSON (Object v)
       "active-chat" -> WSProtocolClientMessageActiveChat <$> parseJSON (Object v)
       "text-message" -> WSProtocolClientMessageTextMessage <$> parseJSON (Object v)
-      "image-message" -> WSProtocolClientMessageImageMessage <$> parseJSON (Object v)
+      "files-message" -> WSProtocolClientMessageFilesMessage <$> parseJSON (Object v)
       "get-messages" -> WSProtocolClientMessageGetMessages <$> parseJSON (Object v)
       _ -> fail $ "Unknown message type: " <> show messageType
 
@@ -205,19 +207,34 @@ instance FromJSON WSTextMessage where
     message <- v .: "message"
     pure $ WSTextMessage message
 
-newtype WSImageMessage = WSImageMessage Text
+data WSFilesMessageItem = WSFilesMessageItem
+  { wsFilesMessageItemFilename :: FilePath
+  , wsFilesMessageItemDataURL :: Text
+  }
   deriving (Generic)
 
-instance Serialise WSImageMessage
+instance Serialise WSFilesMessageItem
 
-instance FromJSON WSImageMessage where
-  parseJSON = withObject "WSImageMessage" $ \v -> do
+instance FromJSON WSFilesMessageItem where
+  parseJSON = withObject "WSFilesMessageItem" $ \v -> do
+    wsFilesMessageItemFilename <- v .: "filename"
+    wsFilesMessageItemDataURL <- v .: "dataURL"
+    pure $ WSFilesMessageItem{..}
+
+newtype WSFilesMessage = WSFilesMessage [WSFilesMessageItem]
+  deriving (Generic)
+
+instance Serialise WSFilesMessage
+
+instance FromJSON WSFilesMessage where
+  parseJSON = withObject "WSFilesMessage" $ \v -> do
     message <- v .: "message"
-    pure $ WSImageMessage message
+    pure $ WSFilesMessage message
 
 data WSMessage
   = WSMessageText WSTextMessage
-  | WSMessageImage WSImageMessage
+  | WSMessageFiles WSFilesMessage
+  | WSUnknownMessage Text
   deriving (Generic)
 
 instance Serialise WSMessage
@@ -270,6 +287,28 @@ hxValsScroll cursor =
 }
 |]
 
+data MediaType = MediaTypeImage | MediaTypeOther
+
+isImageMIME :: Text -> Bool
+isImageMIME mime = "image/" `T.isPrefixOf` T.toLower mime
+
+getMediaType :: Text -> MediaType
+getMediaType dataURL =
+  case Atto.parseOnly dataUrlP dataURL of
+    Left _ -> MediaTypeOther
+    Right mimeType ->
+      if isImageMIME mimeType
+        then MediaTypeImage
+        else MediaTypeOther
+
+dataUrlP :: Atto.Parser Text
+dataUrlP = do
+  _ <- Atto.string "data:"
+  maybeContentType <- optional fieldContent
+  pure $ fromMaybe "text/plain" maybeContentType
+ where
+  fieldContent = Atto.takeWhile1 (\c -> c /= ';' && c /= ',')
+
 messageToHTML :: (Monad m) => DecryptedMessage -> HtmlT m ()
 messageToHTML DecryptedMessage{..} = do
   div_ [class_ "message-header"] $ do
@@ -281,7 +320,15 @@ messageToHTML DecryptedMessage{..} = do
   div_ [class_ "message-content"] $ do
     case decryptedMessageBody of
       WSMessageText (WSTextMessage text) -> small_ $ sequence_ $ L.intersperse (br_ []) (toHtml <$> T.lines text)
-      WSMessageImage (WSImageMessage dataURL) -> img_ [src_ dataURL]
+      WSMessageFiles (WSFilesMessage items) -> sequence_ $ L.intersperse (br_ []) $ fileToHTML <$> items
+      WSUnknownMessage t -> small_ [class_ "error-text "] $ toHtml t
+ where
+  fileToHTML WSFilesMessageItem{..} = case getMediaType wsFilesMessageItemDataURL of
+    MediaTypeImage -> img_ [src_ wsFilesMessageItemDataURL]
+    _ ->
+      small_ $
+        a_ [href_ wsFilesMessageItemDataURL, download_ $ T.pack wsFilesMessageItemFilename] $
+          toHtml wsFilesMessageItemFilename
 
 oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
 oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =

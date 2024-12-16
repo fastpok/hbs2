@@ -53,10 +53,12 @@
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -286,7 +288,7 @@
   color: var(--pico-h1-color);
 }
 
-.message-form-button.send-image {
+.message-form-button.send-files {
   padding-left: calc(var(--pico-form-element-spacing-horizontal) * 0.5);
   padding-right: calc(var(--pico-form-element-spacing-horizontal) * 0.25);
   border-right: none;
@@ -305,11 +307,11 @@
   width: 1.25rem;
 }
 
-#image-message-form input {
+#files-message-form input {
   margin-bottom: 0;
 }
 
-#send-image-submit-button {
+#send-files-submit-button {
   width: auto;
   margin-bottom: 0;
 }
@@ -367,4 +369,12 @@
   height: 0.5rem;
   border-radius: 0.25rem;
   max-width: 20rem;
+}
+
+.error-text {
+  color: var(--pico-color-red-500);
+}
+
+[data-theme=dark] .error-text {
+  color: var(--pico-color-red-600);
 }
