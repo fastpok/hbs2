@@ -67,9 +67,7 @@ executable chat
     hs-source-dirs: src
     main-is:        Main.hs
 
-    other-modules:  Pages.Main
-                  , Pages.Login
-                  , Components.Head
+    other-modules:  Components.Head
                   , Components.Icons
                   , Components.LogoutButton
                   , Components.Skeleton
@@ -81,6 +79,8 @@ executable chat
                   , Error
                   , Message
                   , Monad
+                  , Pages.Login
+                  , Pages.Main
                   , Types
                   , Util.Lucid.Attributes
                   , Util.Lucid.Elements
