@@ -18,21 +18,19 @@ function scrollToBottom(element) {
 
 function showNotification(messageElement) {
   // TODO: show notifications in inactive chats
-  // TODO: show chat in notification
+  // TODO: show chat name in notification
   Notification.requestPermission().then((result) => {
     if (result === "granted") {
       const img = "img/logo.jpg";
       const author = messageElement.querySelector(
         ".message-header div strong small"
       ).innerText;
-      // TODO: handle line breaks
-      const content = messageElement.querySelector(
-        ".message-content small"
-      ).innerText;
-      const notification = new Notification(author, {
-        icon: img,
-        body: content,
-      });
+      // // TODO: handle line breaks
+      // const content = messageElement.querySelector(
+      //   ".message-content small"
+      // ).innerText;
+      const title = "New message from " + author;
+      const notification = new Notification(title, { icon: img });
     }
   });
 }
@@ -42,6 +40,7 @@ function getUserSigil() {
   return user.sigil;
 }
 
+// NOTE: we use htmx swap-oob here, so the the encapsulating tags are stripped
 function parseIncomingWSMessageHTML(message) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(message, "text/html");
