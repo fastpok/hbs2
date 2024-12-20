@@ -88,7 +88,7 @@ htmlBody refChans' = body_
           div_ [class_ "messages", id_ "messages"] ""
           div_ [class_ "message-input-wrapper"] $
             form_ [id_ "message-form", wsSend_ "", hxVals_ "{\"type\": \"text-message\"}"] $
-              fieldset_ [role_ "group", class_ "mb-0"] $
+              fieldset_ [id_ "message-input-fieldset", role_ "group", class_ "mb-0"] $
                 do
                   textarea_
                     [ class_ "message-input"
@@ -247,7 +247,7 @@ on htmx:wsOpen
 autoresizeMessageInput :: String
 autoresizeMessageInput =
   [qc|
-js autoResize(document.getElementById('message-input')) end
+js autoResize(document.getElementById('message-input'), document.getElementById('message-input-fieldset')) end
 |]
 
 handleMessageInput :: Attribute

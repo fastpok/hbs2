@@ -1,14 +1,13 @@
-function autoResize(element) {
-  element.style.height = "auto";
-  const scrollHeight = element.scrollHeight;
-  const maxHeight = parseFloat(getComputedStyle(element).lineHeight) * 10; // 10 rows
-
+function autoResize(innerElement, outerElement) {
+  outerElement.style.height = "auto";
+  const scrollHeight = innerElement.scrollHeight;
+  const maxHeight = parseFloat(getComputedStyle(innerElement).lineHeight) * 10; // 10 rows
   if (scrollHeight <= maxHeight) {
-    element.style.height = scrollHeight + "px";
-    element.style.overflowY = "hidden";
+    outerElement.style.height = scrollHeight + "px";
+    innerElement.style.overflowY = "hidden";
   } else {
-    element.style.height = maxHeight + "px";
-    element.style.overflowY = "auto";
+    outerElement.style.height = maxHeight + "px";
+    innerElement.style.overflowY = "auto";
   }
 }
 
@@ -72,7 +71,7 @@ function handleIncomingWSMessage(message) {
   }
 }
 
-function handleOldMessages(messageElement) {}
+function handleOldMessages(messageElement) { }
 
 function handleNewMessage(messageElement) {
   if (isOwnMessage(messageElement)) {
@@ -83,7 +82,7 @@ function handleNewMessage(messageElement) {
   }
 }
 
-function handleMembers(messageElement) {}
+function handleMembers(messageElement) { }
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
