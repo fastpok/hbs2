@@ -5,7 +5,7 @@ import Lucid
 htmlHead :: Html ()
 htmlHead = head_ $ do
   meta_ [charset_ "utf-8"]
-  meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1, maximum-scale=1"]
+  meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1, interactive-widget=resizes-content"]
   meta_ [name_ "color-scheme", content_ "light dark"]
   -- This script should be run as early as possible to avoid color flashing occurring on page load.
   script_ [src_ "js/theme-toggle.js"] ("" :: String)

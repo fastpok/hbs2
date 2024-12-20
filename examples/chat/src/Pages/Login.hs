@@ -32,8 +32,8 @@ loginPage = do
       htmlBody sigils'
 
 htmlBody :: [MySigil] -> Html ()
-htmlBody sigils' = body_ [class_ "min-h-screen flex"] $
-  div_ [class_ "container grow flex flex-col"] $ do
+htmlBody sigils' = body_ [class_ "h-dvh"] $
+  div_ [class_ "container h-full flex flex-col"] $ do
     div_ [class_ "content-header header-color"] $ do
       div_ "hbs2 chat"
       div_ [class_ "header-right"] $ do
@@ -70,6 +70,6 @@ handleLogin =
   hyper_
     [qc|
 on click
-set localStorage.user to #user-select.value
-go to url '/'
+  set localStorage.user to #user-select.value
+  go to url '/'
 |]

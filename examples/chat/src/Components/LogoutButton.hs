@@ -10,7 +10,6 @@ logoutButton = button_
   [ class_ "outline header-button"
   , title_ "Log out"
   , ariaLabel_ "auto"
-  , ariaLive_ "polite"
   , handleLogout
   ]
   $ do

@@ -1,4 +1,4 @@
-module Components.Icons (getIconSvg, makeIcon, IconType (..)) where
+module Components.Icons where
 
 import Data.Text (Text)
 import Lucid
@@ -15,6 +15,8 @@ data IconType
   | Photo
   | PaperClip
   | AlertTriangle
+  | Menu
+  | ChevronLeft
 
 getIconSvg :: IconType -> Text
 getIconSvg PaperAirplane =
@@ -56,6 +58,14 @@ getIconSvg PaperClip =
 getIconSvg AlertTriangle =
   [qc|
 <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-alert-triangle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+|]
+getIconSvg Menu =
+  [qc|
+<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-menu-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6l16 0" /><path d="M4 12l16 0" /><path d="M4 18l16 0" /></svg>
+|]
+getIconSvg ChevronLeft =
+  [qc|
+<svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-chevron-left"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 6l-6 6l6 6" /></svg>
 |]
 
 makeIcon :: (Monad m) => IconType -> HtmlT m ()

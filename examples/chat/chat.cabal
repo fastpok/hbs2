@@ -70,6 +70,7 @@ executable chat
     other-modules:  Components.Head
                   , Components.Icons
                   , Components.LogoutButton
+                  , Components.MenuButton
                   , Components.Skeleton
                   , Components.ThemeToggleButton
                   , Components.WSConnectionStatus
