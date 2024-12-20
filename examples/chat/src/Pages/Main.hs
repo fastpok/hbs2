@@ -3,6 +3,7 @@ module Pages.Main (mainPage) where
 import Components.Head
 import Components.Icons
 import Components.LogoutButton
+import Components.MenuButton
 import Components.ThemeToggleButton
 import Components.WSConnectionStatus
 import Config
@@ -33,7 +34,7 @@ mainPage = do
 
 htmlBody :: [NamedRefChan] -> Html ()
 htmlBody refChans' = body_
-  [ class_ "h-screen"
+  [ class_ "h-dvh"
   , hxExt_ "ws"
   , wsConnect_ "/"
   , wsSend_ ""
@@ -50,7 +51,9 @@ htmlBody refChans' = body_
   $ do
     initScript
     div_ [class_ "wrapper"] $ do
-      div_ [class_ "sidebar-header wrapper-item header-color"] "Chats"
+      div_ [class_ "sidebar-header wrapper-item header-color"] do
+        "Chats"
+        backButton
       div_ [class_ "sidebar wrapper-item chats"] $ do
         case refChans' of
           [] -> p_ $ small_ "There are no chats available"
@@ -77,6 +80,7 @@ htmlBody refChans' = body_
           wsConnectionStatus
           themeToggleButton
           logoutButton
+          menuButton
 
       div_ [class_ "content wrapper-item"] $ do
         div_ [id_ "chat-placeholder"] $ p_ "Select a chat"
@@ -107,7 +111,9 @@ htmlBody refChans' = body_
                   button_
                     [class_ "outline message-form-button send-message", type_ "submit"]
                     $ makeIcon PaperAirplane
-      div_ [class_ "members-header wrapper-item header-color"] "Members"
+      div_ [class_ "members-header wrapper-item header-color"] do
+        "Members"
+        backButton
       div_ [class_ "members wrapper-item", id_ "members"] ""
       sendFilesModal
 

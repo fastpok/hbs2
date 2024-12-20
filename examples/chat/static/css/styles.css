@@ -1,4 +1,4 @@
-/* Start tailwindcss like classes */
+/* Start tailwindcss-like classes */
 
 .mb-0 {
   margin-bottom: 0;
@@ -8,12 +8,8 @@
   margin-top: var(--pico-spacing);
 }
 
-.h-screen {
-  height: 100vh;
-}
-
-.min-h-screen {
-  min-height: 100vh;
+.h-dvh {
+  height: 100dvh;
 }
 
 .h-full {
@@ -73,13 +69,20 @@
 .wrapper {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) 4fr 1fr;
+  grid-template-columns: 0 1fr 0;
   grid-template-rows: auto 1fr;
   grid-template-areas:
     "sidebar-header content-header members-header"
-    "sidebar        content        members";
-  gap: 1px;
+    "sidebar        content        members       ";
+  row-gap: 1px;
   background-color: var(--pico-muted-border-color);
+}
+
+@media (min-width: 768px) {
+  .wrapper {
+    grid-template-columns: 1fr 4fr 1fr;
+    column-gap: 1px;
+  }
 }
 
 .wrapper-item {
@@ -87,16 +90,34 @@
 }
 
 .sidebar-header {
+  grid-area: sidebar-header;
   padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
-  display: flex;
+  display: none;
+  justify-content: space-between;
   align-items: center;
+  gap: var(--pico-spacing);
   background-color: var(--pico-code-background-color);
 }
 
+@media (min-width: 768px) {
+  .sidebar-header {
+    display: flex;
+  }
+}
+
 .sidebar {
-  padding: var(--pico-spacing);
   grid-area: sidebar;
+  padding: var(--pico-spacing);
   background-color: var(--pico-code-background-color);
+  display: none;
+  flex-direction: column;
+  gap: calc(var(--pico-spacing) * 0.5);
+}
+
+@media (min-width: 768px) {
+  .sidebar {
+    display: flex;
+  }
 }
 
 .sidebar p {
@@ -104,12 +125,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.chats {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--pico-spacing) * 0.5);
 }
 
 .chat-item {
@@ -129,6 +144,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex-grow: 1;
+  /* TODO: is there really no other way other than "width: 0" to make it shrink? */
+  width: 0;
 }
 
 .chat-button:is(:hover) {
@@ -150,11 +167,14 @@
 }
 
 .content-header {
+  grid-area: content-header;
   padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--pico-spacing);
+  /* TODO: figure out how to do without "min-width: 0" here  */
+  min-width: 0;
 }
 
 .header-right {
@@ -192,6 +212,45 @@
   display: none;
 }
 
+@media (min-width: 768px) {
+  #menu-button {
+    display: none;
+  }
+}
+
+#menu-button summary::after {
+  content: none;
+}
+
+#menu-button summary+ul {
+  left: auto;
+  right: 0;
+}
+
+@media (min-width: 768px) {
+  #back-button {
+    display: none;
+  }
+}
+
+.menu-item-button {
+  width: 100%;
+  margin: calc(var(--pico-form-element-spacing-vertical) * -.5) calc(var(--pico-form-element-spacing-horizontal) * -1);
+  padding: calc(var(--pico-form-element-spacing-vertical) * .5) var(--pico-form-element-spacing-horizontal);
+  color: var(--pico-dropdown-color);
+  background-color: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  box-sizing: content-box;
+}
+
+.menu-item-button:hover {
+  background-color: var(--pico-dropdown-hover-background-color);
+}
+
 .ws-connection-status {
   display: flex;
   align-items: center;
@@ -207,6 +266,13 @@
 
 .ws-connection-status.offline .icon {
   color: var(--pico-form-element-invalid-active-border-color);
+}
+
+#chat-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .content {
@@ -317,15 +383,32 @@
 }
 
 .members-header {
+  grid-area: members-header;
   padding: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
-  display: flex;
+  display: none;
+  justify-content: space-between;
   align-items: center;
+  gap: var(--pico-spacing);
   background-color: var(--pico-code-background-color);
 }
 
+@media (min-width: 768px) {
+  .members-header {
+    display: flex;
+  }
+}
+
 .members {
+  grid-area: members;
   padding: var(--pico-spacing);
   background-color: var(--pico-code-background-color);
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .members {
+    display: block;
+  }
 }
 
 .members p {
