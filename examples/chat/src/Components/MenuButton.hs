@@ -10,11 +10,31 @@ menuButton = details_ [id_ "menu-button", class_ "dropdown mb-0"] $ do
   summary_
     [ class_ "outline header-button"
     , role_ "button"
+    , hanldeWindowResize
     ]
     $ makeIcon Menu
   ul_ do
     li_ $ button_ [class_ "menu-item-button", handleChats] "Chats"
     li_ $ button_ [class_ "menu-item-button", handleMembers] "Members"
+
+-- NOTE: since we change styles on narrow screens by using this menu,
+-- we need to reset styles back on wide screens
+hanldeWindowResize :: Attribute
+hanldeWindowResize =
+  hyper_
+    [qc|
+init
+  set mql to window.matchMedia("(min-width: 768px)")
+  set mql.onchange to
+    if mql.matches
+      set .wrapper's *grid-template-columns to '1fr 4fr 1fr'
+      set .sidebar-header's *display to 'flex'
+      set .sidebar's *display to 'flex'
+      set .content-header's *display to 'flex'
+      set .content's *display to 'flex'
+      set .members-header's *display to 'flex'
+      set .members's *display to 'block'
+|]
 
 handleChats :: Attribute
 handleChats =
@@ -23,10 +43,10 @@ handleChats =
 on click
   remove @open from #menu-button
   set .wrapper's *grid-template-columns to '1fr 0 0'
-  set .content-header's *display to 'none'
-  set .content's *display to 'none'
   set .sidebar-header's *display to 'flex'
   set .sidebar's *display to 'flex'
+  set .content-header's *display to 'none'
+  set .content's *display to 'none'
 |]
 
 handleMembers :: Attribute
@@ -51,7 +71,7 @@ backButton = button_
   , handleBack
   ]
   $ do
-    makeIcon ChevronLeft
+    makeIcon X
 
 handleBack :: Attribute
 handleBack =
@@ -61,8 +81,8 @@ on click
   set .wrapper's *grid-template-columns to '0 1fr 0'
   set .sidebar-header's *display to 'none'
   set .sidebar's *display to 'none'
-  set .members-header's *display to 'none'
-  set .members's *display to 'none'
   set .content-header's *display to 'flex'
   set .content's *display to 'flex'
+  set .members-header's *display to 'none'
+  set .members's *display to 'none'
 |]
