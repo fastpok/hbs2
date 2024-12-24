@@ -24,16 +24,7 @@ hanldeWindowResize =
   hyper_
     [qc|
 init
-  set mql to window.matchMedia("(min-width: 768px)")
-  set mql.onchange to
-    if mql.matches
-      set .wrapper's *grid-template-columns to '1fr 4fr 1fr'
-      set .sidebar-header's *display to 'flex'
-      set .sidebar's *display to 'flex'
-      set .content-header's *display to 'flex'
-      set .content's *display to 'flex'
-      set .members-header's *display to 'flex'
-      set .members's *display to 'block'
+  call handleWindowResize()
 |]
 
 handleChats :: Attribute

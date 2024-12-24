@@ -71,7 +71,7 @@ function handleIncomingWSMessage(message) {
   }
 }
 
-function handleOldMessages(messageElement) { }
+function handleOldMessages(messageElement) {}
 
 function handleNewMessage(messageElement) {
   if (isOwnMessage(messageElement)) {
@@ -82,7 +82,7 @@ function handleNewMessage(messageElement) {
   }
 }
 
-function handleMembers(messageElement) { }
+function handleMembers(messageElement) {}
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
@@ -145,4 +145,61 @@ function handlePaste(event) {
       document.getElementById("send-files-submit-button").focus();
     }
   }
+}
+
+// TODO: this is ugly, think of a better way to implement header menu
+function handleWindowResize() {
+  function getInitialStyles() {
+    return {
+      wrapper: document.querySelector(".wrapper").style.gridTemplateColumns,
+      sidebarHeader: document.querySelector(".sidebar-header").style.display,
+      sidebar: document.querySelector(".sidebar").style.display,
+      contentHeader: document.querySelector(".content-header").style.display,
+      content: document.querySelector(".content").style.display,
+      membersHeader: document.querySelector(".members-header").style.display,
+      members: document.querySelector(".members").style.display,
+    };
+  }
+
+  function applyStyles(styles) {
+    document.querySelector(".wrapper").style.gridTemplateColumns =
+      styles.wrapper;
+    document.querySelector(".sidebar-header").style.display =
+      styles.sidebarHeader;
+    document.querySelector(".sidebar").style.display = styles.sidebar;
+    document.querySelector(".content-header").style.display =
+      styles.contentHeader;
+    document.querySelector(".content").style.display = styles.content;
+    document.querySelector(".members-header").style.display =
+      styles.membersHeader;
+    document.querySelector(".members").style.display = styles.members;
+  }
+
+  const mediaQueryList = window.matchMedia("(min-width: 768px)");
+
+  let initialStyles = getInitialStyles();
+  mediaQueryList.addEventListener("change", () => {
+    if (mediaQueryList.matches) {
+      initialStyles = getInitialStyles();
+      applyStyles({
+        wrapper: "1fr 4fr 1fr",
+        sidebarHeader: "flex",
+        sidebar: "flex",
+        contentHeader: "flex",
+        content: "flex",
+        membersHeader: "flex",
+        members: "block",
+      });
+    } else {
+      applyStyles({
+        wrapper: initialStyles.wrapper,
+        sidebarHeader: initialStyles.sidebarHeader,
+        sidebar: initialStyles.sidebar,
+        contentHeader: initialStyles.contentHeader,
+        content: initialStyles.content,
+        membersHeader: initialStyles.membersHeader,
+        members: initialStyles.members,
+      });
+    }
+  });
 }
