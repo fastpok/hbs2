@@ -76,6 +76,8 @@
     "sidebar        content        members       ";
   row-gap: 1px;
   background-color: var(--pico-muted-border-color);
+  /* removes horizontal scroll on narrow screens caused by tooltips */
+  overflow-x: hidden;
 }
 
 @media (min-width: 768px) {
