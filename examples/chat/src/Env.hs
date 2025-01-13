@@ -35,6 +35,7 @@ data Env = Env
   , staticPath :: FilePath
   , wsSessionsTVar :: TVar (Map WSSessionID WSSession)
   , chatEventsChan :: TChan ChatEvent
+  , messageDownloadQueue :: TQueue MessageDownloadQueueItem
   }
 
 initEnv :: (MonadUnliftIO m) => Config -> m Env
@@ -46,9 +47,10 @@ initEnv config = do
   dbEnv <- initDBEnv $ Config.dbPath config
   let staticPath = fromMaybe "examples/chat/static/" $ Config.staticPath config
   wsSessionsTVar <- newTVarIO Map.empty
-  chatEventsChan <- newBroadcastTChanIO
   refChanNotifySink <- newNotifySink
   refChanTxNotifySink <- newNotifySink
+  chatEventsChan <- newBroadcastTChanIO
+  messageDownloadQueue <- newTQueueIO
   pure $ Env{..}
 
 initDBEnv :: (MonadUnliftIO m) => Maybe FilePath -> m DBPipeEnv

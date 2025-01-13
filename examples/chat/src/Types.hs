@@ -1,6 +1,7 @@
 module Types where
 
 import Codec.Serialise
+import Components.Skeleton
 import Control.Applicative
 import DBPipe.SQLite
 import Data.Aeson hiding (encode, json)
@@ -262,15 +263,22 @@ hxSwapToText :: WSOldMessagesHXSwap -> Text
 hxSwapToText WSOldMessagesHXSwapInnerHTML = "innerHTML"
 hxSwapToText WSOldMessagesHXSwapBeforeEnd = "beforeend"
 
+newtype MessageSkeleton = MessageSkeleton MyHashRef
+
+data MessageOrSkeleton = MessageOrSkeletonMessage DecryptedMessage | MessageOrSkeletonSkeleton MessageSkeleton
+
 data WSOldMessages = WSOldMessages
   { wsOldMessagesHXSwap :: WSOldMessagesHXSwap
-  , wsOldMessages :: [DecryptedMessage]
+  , wsOldMessages :: [MessageOrSkeleton]
   }
 
-data WSNewMessage = WSNewMessage
-  { wsNewMessageMessage :: DecryptedMessage
-  , wsNewMessageIsOwn :: Bool
-  }
+data WSNewMessage
+  = WSNewMessage
+      { wsNewMessageMessage :: DecryptedMessage
+      , wsNewMessageIsOwn :: Bool
+      , wsNewMessageReplaceSkeleton :: Maybe MyHashRef
+      }
+  | WSNewMessageSkeleton MessageSkeleton
 
 data InfiniteScrollOpts = ApplyInfiniteScrollAttrs | DontApplyInfiniteScrollAttrs
 
@@ -330,22 +338,34 @@ messageToHTML DecryptedMessage{..} = do
         a_ [href_ wsFilesMessageItemDataURL, download_ $ T.pack wsFilesMessageItemFilename] $
           toHtml wsFilesMessageItemFilename
 
-oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> DecryptedMessage -> HtmlT m ()
-oldMessageToHtml infiniteScrollOpts message@DecryptedMessage{..} =
-  div_ ([class_ "message", data_ "author-key" authorKeyText] <> infiniteScrollAttrs) $
-    messageToHTML message
+infiniteScrollAttrs :: InfiniteScrollOpts -> MyHashRef -> [Attribute]
+infiniteScrollAttrs DontApplyInfiniteScrollAttrs _ = []
+infiniteScrollAttrs ApplyInfiniteScrollAttrs cursor =
+  [ wsSend_ ""
+  , hxVals_ $ hxValsScroll cursor
+  , hxTrigger_ "intersect once delay:200ms"
+  , hxSwap_ "afterend"
+  ]
+
+oldMessageToHtml :: (Monad m) => InfiniteScrollOpts -> MessageOrSkeleton -> HtmlT m ()
+oldMessageToHtml infiniteScrollOpts (MessageOrSkeletonMessage message@DecryptedMessage{..}) =
+  div_ attrs $ messageToHTML message
  where
-  cursor = decryptedMessageHashRef
-  hxVals = hxValsScroll cursor
-  infiniteScrollAttrs = case infiniteScrollOpts of
-    ApplyInfiniteScrollAttrs ->
-      [ wsSend_ ""
-      , hxVals_ hxVals
-      , hxTrigger_ "intersect once delay:200ms"
-      , hxSwap_ "afterend"
-      ]
-    DontApplyInfiniteScrollAttrs -> []
-  authorKeyText = T.pack $ show $ pretty $ AsBase58 $ decryptedMessageAuthorKey
+  attrs =
+    [ class_ "message"
+    , data_ "author-key" authorKeyText
+    ]
+      <> infiniteScrollAttrs infiniteScrollOpts decryptedMessageHashRef
+  authorKeyText = T.pack $ show $ pretty $ AsBase58 decryptedMessageAuthorKey
+oldMessageToHtml infiniteScrollOpts (MessageOrSkeletonSkeleton (MessageSkeleton messageHashRef)) =
+  div_ attrs messageSkeleton
+ where
+  attrs =
+    [ class_ "message"
+    , data_ "message-id" messageHashRefText
+    ]
+      <> infiniteScrollAttrs infiniteScrollOpts messageHashRef
+  messageHashRefText = T.pack $ show $ pretty messageHashRef
 
 newMessageToHtml :: (Monad m) => WSNewMessage -> HtmlT m ()
 newMessageToHtml WSNewMessage{..} =
@@ -353,12 +373,21 @@ newMessageToHtml WSNewMessage{..} =
     div_ [class_ "message", data_ "author-key" authorKeyText] $
       messageToHTML wsNewMessageMessage
  where
-  attrs = [data_ "message-type" "new-message", hxSwapOOB_ "afterbegin:#messages"]
+  attrs = [data_ "message-type" "new-message", hxSwapOOB_ hxSwapOOB]
   allAttrs =
     if wsNewMessageIsOwn
       then data_ "own-message" "" : attrs
       else attrs
   authorKeyText = T.pack $ show $ pretty $ AsBase58 $ decryptedMessageAuthorKey wsNewMessageMessage
+  hxSwapOOB = case wsNewMessageReplaceSkeleton of
+    Nothing -> "afterbegin:#messages"
+    Just messageHashRef -> "outerHTML:#message-skeleton-" <> T.pack (show $ pretty messageHashRef)
+newMessageToHtml (WSNewMessageSkeleton (MessageSkeleton messageHashRef)) =
+  div_ attrs $
+    div_ [class_ "message", id_ $ "message-skeleton-" <> messageHashRefText] messageSkeleton
+ where
+  attrs = [data_ "message-type" "new-message-skeleton", hxSwapOOB_ "afterbegin:#messages"]
+  messageHashRefText = T.pack $ show $ pretty messageHashRef
 
 -- Applies first function to all elements except the last one.
 -- Applies second function to the last element.
@@ -428,10 +457,15 @@ data WSName = WSName
 
 instance ToHtml WSName where
   toHtml (WSName{..}) = do
-    let authorKeyText = T.pack $ show $ pretty $ AsBase58 $ wsNameUserKey
+    let authorKeyText = T.pack $ show $ pretty $ AsBase58 wsNameUserKey
         messagesOOB = "textContent:[data-author-key=\"" <> authorKeyText <> "\"] .author-name"
     div_ [hxSwapOOB_ messagesOOB, data_ "message-type" "name"] $ toHtml wsNameUserName
   toHtmlRaw = toHtml
+
+data MessageDownloadQueueItem = MessageDownloadQueueItem
+  { messageDownloadQueueItemRefChan :: MyRefChan
+  , messageDownloadQueueItemHashRef :: MyHashRef
+  }
 
 data ChatEvent
   = MessageEvent
@@ -447,4 +481,9 @@ data ChatEvent
       { nameEventRefChan :: MyRefChan
       , nameEventUserKey :: MyPublicKey
       , nameEventUserName :: Text
+      }
+  | MessageAddedToDownloadQueueEvent MessageDownloadQueueItem
+  | MessageDownloadedEvent
+      { messageDownloadedEventRefChan :: MyRefChan
+      , messageDownloadedEventMessage :: DecryptedMessage
       }

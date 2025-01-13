@@ -13,6 +13,7 @@ import HBS2.Net.Auth.Schema ()
 import HBS2.OrDie
 
 import Codec.Serialise
+import Control.Monad.Reader
 import Data.Attoparsec.Text (Parser)
 import Data.Attoparsec.Text qualified as Atto
 import Data.ByteString (ByteString)
@@ -22,7 +23,9 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time
 import Data.Time.Clock.POSIX
+import Env
 import HBS2.KeyMan.Keys.Direct
+import HBS2.Peer.RPC.Client.StorageClient
 import HBS2.Prelude
 import HBS2.Storage
 import Lens.Micro.Mtl
@@ -90,14 +93,41 @@ myCreateMessage CreateMessageServices{..} flags gks sender' rcpts' parts bs = do
     (rcpt, SigilData{..}) <- unboxSignedBox0 (sigilData si) & orThrow (MalformedSigil h)
     pure (rcpt, sigilDataEncKey)
 
-getMessageWait :: (MonadUnliftIO m) => AnyStorage -> MyHashRef -> m EncryptedMessage
-getMessageWait storage messageHashRef = do
+getMessageFromStorage ::
+  (MonadUnliftIO m, MonadReader Env m, s ~ HBS2Basic) =>
+  Bool ->
+  MyRefChan ->
+  MyHashRef ->
+  m (Maybe (PubKey 'Sign s, MessageContent s, ByteString))
+getMessageFromStorage addToDownloadQueue refChan messageHashRef = do
+  storageAPI <- asks storageAPI
+  let storage = AnyStorage (StorageClient storageAPI)
   maybeBlock <- getBlock storage (fromMyHashRef messageHashRef)
+  messageDownloadQueue' <- asks messageDownloadQueue
   case maybeBlock of
-    Just block -> orThrowUser "invalid message format" (deserialiseOrFail block)
     Nothing -> do
-      pause @'Seconds 0.1
-      getMessageWait storage messageHashRef
+      when addToDownloadQueue do
+        atomically $
+          writeTQueue messageDownloadQueue' $
+            MessageDownloadQueueItem
+              { messageDownloadQueueItemRefChan = refChan
+              , messageDownloadQueueItemHashRef = messageHashRef
+              }
+      pure Nothing
+    Just block -> do
+      encryptedMessage <- orThrowUser "invalid message format" (deserialiseOrFail block)
+      readMessageResult <- myReadMessage encryptedMessage
+      case readMessageResult of
+        Nothing -> do
+          -- TODO: it would be better not to try to read and deserialize this message from storage again
+          atomically $
+            writeTQueue messageDownloadQueue' $
+              MessageDownloadQueueItem
+                { messageDownloadQueueItemRefChan = refChan
+                , messageDownloadQueueItemHashRef = messageHashRef
+                }
+          pure Nothing
+        Just message -> pure $ Just message
 
 specialMessageParser :: Parser SpecialMessage
 specialMessageParser = do
@@ -131,13 +161,12 @@ myReadMessage ::
   , s ~ HBS2Basic
   ) =>
   Message s ->
-  m (PubKey 'Sign s, MessageContent s, ByteString)
+  m (Maybe (PubKey 'Sign s, MessageContent s, ByteString))
 myReadMessage message = do
   let readMessageServices = ReadMessageServices (liftIO . runKeymanClientRO . extractGroupKeySecret)
   result <- try $ readMessage readMessageServices message
   case result of
-    Left ReadNoGroupKeyAccess -> do
-      pause @'Seconds 0.1
-      myReadMessage message
+    -- most likely, the encryption keys haven't been downloaded yet
+    Left ReadNoGroupKeyAccess -> pure Nothing
     Left e -> throwIO e
-    Right y -> pure y
+    Right y -> pure $ Just y
