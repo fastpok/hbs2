@@ -111,22 +111,23 @@ myWSApp conn = do
       liftIO $ WS.sendTextData conn WSErrorBadHello
       myWSApp conn
 
-getDecryptedMessageByMetadata :: (MonadReader Env m, MonadUnliftIO m) => MessageMetadata -> m DecryptedMessage
+getDecryptedMessageByMetadata :: (MonadReader Env m, MonadUnliftIO m) => MessageMetadata -> m (Either MyHashRef DecryptedMessage)
 getDecryptedMessageByMetadata MessageMetadata{..} = do
-  storageAPI <- asks storageAPI
-  let storage = AnyStorage (StorageClient storageAPI)
-  encryptedMessage <- getMessageWait storage messageMetaHashRef
-  (_authorPublicKey, _messageContent, messageDataBS) <- myReadMessage encryptedMessage
-  maybeUsername <- withDB $ selectUsername messageMetaAuthor messageMetaChat
-  pure $
-    DecryptedMessage
-      { decryptedMessageHashRef = messageMetaHashRef
-      , decryptedMessageAuthorKey = messageMetaAuthor
-      , decryptedMessageAuthorName = maybeUsername
-      , decryptedMessageChat = messageMetaChat
-      , decryptedMessageCreatedAt = messageMetaCreatedAt
-      , decryptedMessageBody = deserialiseMessageData messageDataBS
-      }
+  getMessageResult <- getMessageFromStorage True messageMetaChat messageMetaHashRef
+  case getMessageResult of
+    Nothing -> pure $ Left messageMetaHashRef
+    Just (_authorPublicKey, _messageContent, messageDataBS) -> do
+      maybeUsername <- withDB $ selectUsername messageMetaAuthor messageMetaChat
+      pure $
+        Right
+          DecryptedMessage
+            { decryptedMessageHashRef = messageMetaHashRef
+            , decryptedMessageAuthorKey = messageMetaAuthor
+            , decryptedMessageAuthorName = maybeUsername
+            , decryptedMessageChat = messageMetaChat
+            , decryptedMessageCreatedAt = messageMetaCreatedAt
+            , decryptedMessageBody = deserialiseMessageData messageDataBS
+            }
 
 handleNewMessage :: (MonadReader Env m, MonadUnliftIO m) => WSMessage -> WSSessionID -> m ()
 handleNewMessage messageContent sessionID = do
@@ -143,45 +144,58 @@ handleNewMessage messageContent sessionID = do
   let author = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil wsSession
   postHashRefToRefChan author activeChat encryptedMessageHashRef
 
+messagesToWSMessages :: [Either MyHashRef DecryptedMessage] -> [MessageOrSkeleton]
+messagesToWSMessages = map go
+ where
+  go = \case
+    Left messageHashRef -> MessageOrSkeletonSkeleton $ MessageSkeleton messageHashRef
+    Right message -> MessageOrSkeletonMessage message
+
+getHashRefsFromMessages :: [Either MyHashRef DecryptedMessage] -> Set MyHashRef
+getHashRefsFromMessages messages = Set.fromList $ map go messages
+ where
+  go = \case
+    Left messageHashRef -> messageHashRef
+    Right message -> decryptedMessageHashRef message
+
 receiveLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
-receiveLoop conn sessionID = do
-  forever $ do
-    wsData <- liftIO $ WS.receiveData conn
-    case wsData of
-      WSProtocolClientMessageActiveChat activeChat -> do
-        let chat = fromWSActiveChat activeChat
-        setActiveChat sessionID chat
-        syncDBWithRefChan chat
-        messageMeta <- withDB $ selectChatMessageMetadata pageSize Nothing chat
-        messages <- mapM getDecryptedMessageByMetadata messageMeta
-        liftIO $
-          WS.sendTextData conn $
-            WSProtocolServerMessageOldMessages $
-              WSOldMessages
-                { wsOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML
-                , wsOldMessages = messages
-                }
-        addSessionMessageHashRefs sessionID $ Set.fromList $ decryptedMessageHashRef <$> messages
-        members <- getWSMembersFromRefChan chat
-        liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
-      WSProtocolClientMessageTextMessage wsTextMessage -> handleNewMessage (WSMessageText wsTextMessage) sessionID
-      WSProtocolClientMessageFilesMessage wsImageMessage -> handleNewMessage (WSMessageFiles wsImageMessage) sessionID
-      WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
-        wsSessionsTVar' <- asks wsSessionsTVar
-        wsSessions <- readTVarIO wsSessionsTVar'
-        wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
-        activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
-        messageMeta <- withDB $ selectChatMessageMetadata wsGetMessagesLimit (Just $ BeforeCursor wsGetMessagesCursor) activeChat
-        messages <- mapM getDecryptedMessageByMetadata messageMeta
-        liftIO $
-          WS.sendTextData conn $
-            WSProtocolServerMessageOldMessages $
-              WSOldMessages
-                { wsOldMessagesHXSwap = WSOldMessagesHXSwapBeforeEnd
-                , wsOldMessages = messages
-                }
-        addSessionMessageHashRefs sessionID $ Set.fromList $ decryptedMessageHashRef <$> messages
-      WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
+receiveLoop conn sessionID = forever do
+  wsData <- liftIO $ WS.receiveData conn
+  case wsData of
+    WSProtocolClientMessageActiveChat activeChat -> do
+      let chat = fromWSActiveChat activeChat
+      setActiveChat sessionID chat
+      syncDBWithRefChan chat
+      messageMeta <- withDB $ selectChatMessageMetadata pageSize Nothing chat
+      messages <- mapM getDecryptedMessageByMetadata messageMeta
+      liftIO $
+        WS.sendTextData conn $
+          WSProtocolServerMessageOldMessages $
+            WSOldMessages
+              { wsOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML
+              , wsOldMessages = messagesToWSMessages messages
+              }
+      addSessionMessageHashRefs sessionID $ getHashRefsFromMessages messages
+      members <- getWSMembersFromRefChan chat
+      liftIO $ WS.sendTextData conn $ WSProtocolServerMessageMembers members
+    WSProtocolClientMessageTextMessage wsTextMessage -> handleNewMessage (WSMessageText wsTextMessage) sessionID
+    WSProtocolClientMessageFilesMessage wsImageMessage -> handleNewMessage (WSMessageFiles wsImageMessage) sessionID
+    WSProtocolClientMessageGetMessages WSGetMessages{..} -> do
+      wsSessionsTVar' <- asks wsSessionsTVar
+      wsSessions <- readTVarIO wsSessionsTVar'
+      wsSession <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+      activeChat <- orThrow (RequestError "active chat is not set") (wsSessionActiveChat wsSession)
+      messageMeta <- withDB $ selectChatMessageMetadata wsGetMessagesLimit (Just $ BeforeCursor wsGetMessagesCursor) activeChat
+      messages <- mapM getDecryptedMessageByMetadata messageMeta
+      liftIO $
+        WS.sendTextData conn $
+          WSProtocolServerMessageOldMessages $
+            WSOldMessages
+              { wsOldMessagesHXSwap = WSOldMessagesHXSwapBeforeEnd
+              , wsOldMessages = messagesToWSMessages messages
+              }
+      addSessionMessageHashRefs sessionID $ getHashRefsFromMessages messages
+    WSProtocolClientMessageHello _ -> liftIO $ WS.sendTextData conn WSErrorDuplicateHello
 
 sendLoop :: (MonadReader Env m, MonadUnliftIO m) => WS.Connection -> WSSessionID -> m ()
 sendLoop conn sessionID = do
@@ -192,21 +206,44 @@ sendLoop conn sessionID = do
     chatEvent <- atomically $ readTChan myChatEventsChan
     wsSessions <- readTVarIO wsSessionsTVar'
     session <- orThrow (ServerError $ "session does not exist: " <> UUID.toText sessionID) (Map.lookup sessionID wsSessions)
+    let sessionClientPublicKey = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil session
     case wsSessionActiveChat session of
       Nothing -> pure ()
       Just activeChat -> case chatEvent of
         MessageEvent{..} -> do
           let isNewMessage = Set.notMember (decryptedMessageHashRef messageEventMessage) (wsSessionMessages session)
           when (messageEventRefChan == activeChat && isNewMessage) $ do
-            let sessionClientPublicKey = MyPublicKey $ sigilSignPk $ fromMySigil $ wsSessionClientSigil session
             liftIO $
               WS.sendTextData conn $
                 WSProtocolServerMessageNewMessage $
                   WSNewMessage
                     { wsNewMessageMessage = messageEventMessage
                     , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthorKey messageEventMessage
+                    , wsNewMessageReplaceSkeleton = Nothing
                     }
             addSessionMessageHashRefs sessionID $ Set.singleton $ decryptedMessageHashRef messageEventMessage
+        MessageAddedToDownloadQueueEvent MessageDownloadQueueItem{..} -> do
+          let isNewMessage = Set.notMember messageDownloadQueueItemHashRef (wsSessionMessages session)
+          when (messageDownloadQueueItemRefChan == activeChat && isNewMessage) $ do
+            liftIO $
+              WS.sendTextData conn $
+                WSProtocolServerMessageNewMessage $
+                  WSNewMessageSkeleton $
+                    MessageSkeleton messageDownloadQueueItemHashRef
+            addSessionMessageHashRefs sessionID $ Set.singleton messageDownloadQueueItemHashRef
+        MessageDownloadedEvent{..} -> do
+          let messageHashRef = decryptedMessageHashRef messageDownloadedEventMessage
+              isSkeletonSent = Set.member messageHashRef (wsSessionMessages session)
+          when (messageDownloadedEventRefChan == activeChat && isSkeletonSent) $ do
+            liftIO $
+              WS.sendTextData conn $
+                WSProtocolServerMessageNewMessage $
+                  WSNewMessage
+                    { wsNewMessageMessage = messageDownloadedEventMessage
+                    , wsNewMessageIsOwn = sessionClientPublicKey == decryptedMessageAuthorKey messageDownloadedEventMessage
+                    , wsNewMessageReplaceSkeleton = Just messageHashRef
+                    }
+            addSessionMessageHashRefs sessionID $ Set.singleton messageHashRef
         MembersEvent{..} -> when (membersEventRefChan == activeChat) $ do
           liftIO $
             WS.sendTextData conn $

@@ -68,13 +68,23 @@ refChanWorker = do
               RefChanTxNotifyData _refChan tx -> case unpackTx tx of
                 Nothing -> pure ()
                 Just messageHashRef -> do
-                  decryptedMessage <- processMessage refChan messageHashRef
-                  atomically $
-                    writeTChan chatEventsChan' $
-                      MessageEvent
-                        { messageEventRefChan = refChan
-                        , messageEventMessage = decryptedMessage
-                        }
+                  processMessageResult <- processMessage True refChan messageHashRef
+                  case processMessageResult of
+                    Nothing ->
+                      atomically $
+                        writeTChan chatEventsChan' $
+                          MessageAddedToDownloadQueueEvent $
+                            MessageDownloadQueueItem
+                              { messageDownloadQueueItemRefChan = refChan
+                              , messageDownloadQueueItemHashRef = messageHashRef
+                              }
+                    Just decryptedMessage ->
+                      atomically $
+                        writeTChan chatEventsChan' $
+                          MessageEvent
+                            { messageEventRefChan = refChan
+                            , messageEventMessage = decryptedMessage
+                            }
           pure [refChanEventHandlerAsync, refChanTxEventHandlerAsync]
       void $ waitAnyCancel notifyWorkers
 
@@ -84,50 +94,51 @@ unpackTx tx = do
   AnnotatedHashRef _ (HashRef messageHashRef) <- eitherToMaybe $ deserialiseOrFail $ BSL.fromStrict bs
   pure $ MyHashRef messageHashRef
 
-processMessage :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> MyHashRef -> m DecryptedMessage
-processMessage refChan messageHashRef = do
-  storageAPI <- asks storageAPI
-  let storage = AnyStorage (StorageClient storageAPI)
-  encryptedMessage <- liftIO $ getMessageWait storage messageHashRef
-  (authorPublicKey, messageContent, messageDataBS) <- myReadMessage encryptedMessage
-  let authorPublicKey' = MyPublicKey authorPublicKey
-      createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
-      messageMetadata =
-        MessageMetadata
-          { messageMetaHashRef = messageHashRef
-          , messageMetaChat = refChan
-          , messageMetaAuthor = authorPublicKey'
-          , messageMetaCreatedAt = createdAt
-          }
-  withDB $ insertMessageMetadata messageMetadata
-  case parseSpecialMessage messageDataBS of
-    Just (SpecialMessageSetName username) -> do
-      nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
-      when nameUpdated do
-        chatEventsChan' <- asks chatEventsChan
-        atomically $
-          writeTChan chatEventsChan' $
-            NameEvent
-              { nameEventRefChan = refChan
-              , nameEventUserKey = authorPublicKey'
-              , nameEventUserName = username
+processMessage :: (MonadUnliftIO m, MonadReader Env m) => Bool -> MyRefChan -> MyHashRef -> m (Maybe DecryptedMessage)
+processMessage retry refChan messageHashRef = do
+  getMessageResult <- getMessageFromStorage retry refChan messageHashRef
+  case getMessageResult of
+    Nothing -> pure Nothing
+    Just (authorPublicKey, messageContent, messageDataBS) -> do
+      let authorPublicKey' = MyPublicKey authorPublicKey
+          createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
+          messageMetadata =
+            MessageMetadata
+              { messageMetaHashRef = messageHashRef
+              , messageMetaChat = refChan
+              , messageMetaAuthor = authorPublicKey'
+              , messageMetaCreatedAt = createdAt
               }
-    Nothing -> pure ()
-  maybeUsername <- withDB $ selectUsername authorPublicKey' refChan
-  pure $
-    DecryptedMessage
-      { decryptedMessageHashRef = messageHashRef
-      , decryptedMessageAuthorKey = authorPublicKey'
-      , decryptedMessageAuthorName = maybeUsername
-      , decryptedMessageChat = refChan
-      , decryptedMessageCreatedAt = createdAt
-      , decryptedMessageBody = deserialiseMessageData messageDataBS
-      }
+      withDB $ insertMessageMetadata messageMetadata
+      case parseSpecialMessage messageDataBS of
+        Just (SpecialMessageSetName username) -> do
+          nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
+          when nameUpdated do
+            chatEventsChan' <- asks chatEventsChan
+            atomically $
+              writeTChan chatEventsChan' $
+                NameEvent
+                  { nameEventRefChan = refChan
+                  , nameEventUserKey = authorPublicKey'
+                  , nameEventUserName = username
+                  }
+        Nothing -> pure ()
+      maybeUsername <- withDB $ selectUsername authorPublicKey' refChan
+      pure $
+        Just
+          DecryptedMessage
+            { decryptedMessageHashRef = messageHashRef
+            , decryptedMessageAuthorKey = authorPublicKey'
+            , decryptedMessageAuthorName = maybeUsername
+            , decryptedMessageChat = refChan
+            , decryptedMessageCreatedAt = createdAt
+            , decryptedMessageBody = deserialiseMessageData messageDataBS
+            }
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
   allChatMessages <- getAllChatMessagesFromRefChan refChan
-  forM_ allChatMessages (processMessage refChan)
+  forM_ allChatMessages (processMessage True refChan)
 
 getAllChatMessagesFromRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m [MyHashRef]
 getAllChatMessagesFromRefChan refChan = do

@@ -8,6 +8,7 @@ import HBS2.Actors.Peer
 import HBS2.Peer.Notify
 import HBS2.Peer.RPC.Client.Unix
 import UnliftIO
+import Workers.DownloadQueue
 import Workers.RefChan
 import Workers.Web
 
@@ -40,6 +41,8 @@ runWorkers = do
 
   refChanWorkerAsync <- async refChanWorker
 
+  downloadQueueWorkerAsync <- async downloadQueueWorker
+
   pure
     [ dbWorkerAsync
     , webWorkerAsync
@@ -52,6 +55,7 @@ runWorkers = do
     , refChanTxNotifyProtoWorkerAsync
     , refChanTxNotifyClientWorkerAsync
     , refChanWorkerAsync
+    , downloadQueueWorkerAsync
     ]
 
 serviceClientWorker :: (MonadReader Env m, MonadUnliftIO m) => MessagingUnix -> m ()

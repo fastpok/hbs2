@@ -88,6 +88,7 @@ executable chat
                   , Util.Text
                   , Util.UserNameColor
                   , Workers
+                  , Workers.DownloadQueue
                   , Workers.RefChan
                   , Workers.Web
 
