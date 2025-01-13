@@ -4,9 +4,9 @@ import Control.Monad
 import Control.Monad.Reader
 import Env
 import HBS2.Clock
+import Message
 import Types
 import UnliftIO
-import Workers.RefChan
 
 downloadQueueWorker :: (MonadReader Env m, MonadUnliftIO m) => m ()
 downloadQueueWorker = do
