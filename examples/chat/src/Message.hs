@@ -14,6 +14,7 @@ import HBS2.OrDie
 
 import Codec.Serialise
 import Control.Monad.Reader
+import DB
 import Data.Attoparsec.Text (Parser)
 import Data.Attoparsec.Text qualified as Atto
 import Data.ByteString (ByteString)
@@ -95,39 +96,18 @@ myCreateMessage CreateMessageServices{..} flags gks sender' rcpts' parts bs = do
 
 getMessageFromStorage ::
   (MonadUnliftIO m, MonadReader Env m, s ~ HBS2Basic) =>
-  Bool ->
-  MyRefChan ->
   MyHashRef ->
   m (Maybe (PubKey 'Sign s, MessageContent s, ByteString))
-getMessageFromStorage addToDownloadQueue refChan messageHashRef = do
+getMessageFromStorage messageHashRef = do
   storageAPI <- asks storageAPI
   let storage = AnyStorage (StorageClient storageAPI)
   maybeBlock <- getBlock storage (fromMyHashRef messageHashRef)
-  messageDownloadQueue' <- asks messageDownloadQueue
   case maybeBlock of
-    Nothing -> do
-      when addToDownloadQueue do
-        atomically $
-          writeTQueue messageDownloadQueue' $
-            MessageDownloadQueueItem
-              { messageDownloadQueueItemRefChan = refChan
-              , messageDownloadQueueItemHashRef = messageHashRef
-              }
-      pure Nothing
+    Nothing -> pure Nothing
     Just block -> do
+      -- TODO: it would be better not to try to read and deserialize this message from storage again while we wait for encryption keys to sync
       encryptedMessage <- orThrowUser "invalid message format" (deserialiseOrFail block)
-      readMessageResult <- myReadMessage encryptedMessage
-      case readMessageResult of
-        Nothing -> do
-          -- TODO: it would be better not to try to read and deserialize this message from storage again
-          atomically $
-            writeTQueue messageDownloadQueue' $
-              MessageDownloadQueueItem
-                { messageDownloadQueueItemRefChan = refChan
-                , messageDownloadQueueItemHashRef = messageHashRef
-                }
-          pure Nothing
-        Just message -> pure $ Just message
+      myReadMessage encryptedMessage
 
 specialMessageParser :: Parser SpecialMessage
 specialMessageParser = do
@@ -170,3 +150,56 @@ myReadMessage message = do
     Left ReadNoGroupKeyAccess -> pure Nothing
     Left e -> throwIO e
     Right y -> pure $ Just y
+
+addToDownloadQueue :: (MonadReader Env m, MonadUnliftIO m) => MyRefChan -> MyHashRef -> m ()
+addToDownloadQueue refChan messageHashRef = do
+  messageDownloadQueue' <- asks messageDownloadQueue
+  atomically $
+    writeTQueue messageDownloadQueue' $
+      MessageDownloadQueueItem
+        { messageDownloadQueueItemRefChan = refChan
+        , messageDownloadQueueItemHashRef = messageHashRef
+        }
+
+processMessage :: (MonadUnliftIO m, MonadReader Env m) => Bool -> MyRefChan -> MyHashRef -> m (Maybe DecryptedMessage)
+processMessage addToDownloadQueueOnFail refChan messageHashRef = do
+  getMessageResult <- getMessageFromStorage messageHashRef
+  case getMessageResult of
+    Nothing -> do
+      when addToDownloadQueueOnFail (addToDownloadQueue refChan messageHashRef)
+      pure Nothing
+    Just (authorPublicKey, messageContent, messageDataBS) -> do
+      let authorPublicKey' = MyPublicKey authorPublicKey
+          createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
+          messageMetadata =
+            MessageMetadata
+              { messageMetaHashRef = messageHashRef
+              , messageMetaChat = refChan
+              , messageMetaAuthor = authorPublicKey'
+              , messageMetaCreatedAt = createdAt
+              }
+      withDB $ insertMessageMetadata messageMetadata
+      case parseSpecialMessage messageDataBS of
+        Just (SpecialMessageSetName username) -> do
+          nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
+          when nameUpdated do
+            chatEventsChan' <- asks chatEventsChan
+            atomically $
+              writeTChan chatEventsChan' $
+                NameEvent
+                  { nameEventRefChan = refChan
+                  , nameEventUserKey = authorPublicKey'
+                  , nameEventUserName = username
+                  }
+        Nothing -> pure ()
+      maybeUsername <- withDB $ selectUsername authorPublicKey' refChan
+      pure $
+        Just
+          DecryptedMessage
+            { decryptedMessageHashRef = messageHashRef
+            , decryptedMessageAuthorKey = authorPublicKey'
+            , decryptedMessageAuthorName = maybeUsername
+            , decryptedMessageChat = refChan
+            , decryptedMessageCreatedAt = createdAt
+            , decryptedMessageBody = deserialiseMessageData messageDataBS
+            }

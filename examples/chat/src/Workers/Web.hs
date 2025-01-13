@@ -113,9 +113,11 @@ myWSApp conn = do
 
 getDecryptedMessageByMetadata :: (MonadReader Env m, MonadUnliftIO m) => MessageMetadata -> m (Either MyHashRef DecryptedMessage)
 getDecryptedMessageByMetadata MessageMetadata{..} = do
-  getMessageResult <- getMessageFromStorage True messageMetaChat messageMetaHashRef
+  getMessageResult <- getMessageFromStorage messageMetaHashRef
   case getMessageResult of
-    Nothing -> pure $ Left messageMetaHashRef
+    Nothing -> do
+      addToDownloadQueue messageMetaChat messageMetaHashRef
+      pure $ Left messageMetaHashRef
     Just (_authorPublicKey, _messageContent, messageDataBS) -> do
       maybeUsername <- withDB $ selectUsername messageMetaAuthor messageMetaChat
       pure $

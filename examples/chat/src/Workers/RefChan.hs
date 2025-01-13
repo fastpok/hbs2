@@ -19,7 +19,6 @@ import HBS2.Net.Auth.Credentials hiding (encode)
 import HBS2.Net.Proto.Notify
 import HBS2.OrDie
 import HBS2.Peer.Notify
-import HBS2.Peer.Proto.Mailbox
 import HBS2.Peer.Proto.RefChan
 import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.StorageClient
@@ -66,7 +65,7 @@ refChanWorker = do
             sink <- asks refChanTxNotifySink
             runNotifySink sink (RefChanTxNotifyKey $ fromMyPublicKey refChan) $ \case
               RefChanTxNotifyData _refChan tx -> case unpackTx tx of
-                Nothing -> pure ()
+                Nothing -> pure () -- TODO: handle this properly
                 Just messageHashRef -> do
                   processMessageResult <- processMessage True refChan messageHashRef
                   case processMessageResult of
@@ -93,47 +92,6 @@ unpackTx tx = do
   (_authorKey, bs) <- unboxSignedBox0 tx
   AnnotatedHashRef _ (HashRef messageHashRef) <- eitherToMaybe $ deserialiseOrFail $ BSL.fromStrict bs
   pure $ MyHashRef messageHashRef
-
-processMessage :: (MonadUnliftIO m, MonadReader Env m) => Bool -> MyRefChan -> MyHashRef -> m (Maybe DecryptedMessage)
-processMessage retry refChan messageHashRef = do
-  getMessageResult <- getMessageFromStorage retry refChan messageHashRef
-  case getMessageResult of
-    Nothing -> pure Nothing
-    Just (authorPublicKey, messageContent, messageDataBS) -> do
-      let authorPublicKey' = MyPublicKey authorPublicKey
-          createdAt = getUTCTimeFromMessageTimestamp $ messageCreated $ messageFlags messageContent
-          messageMetadata =
-            MessageMetadata
-              { messageMetaHashRef = messageHashRef
-              , messageMetaChat = refChan
-              , messageMetaAuthor = authorPublicKey'
-              , messageMetaCreatedAt = createdAt
-              }
-      withDB $ insertMessageMetadata messageMetadata
-      case parseSpecialMessage messageDataBS of
-        Just (SpecialMessageSetName username) -> do
-          nameUpdated <- withDB $ insertUsername authorPublicKey' refChan username createdAt
-          when nameUpdated do
-            chatEventsChan' <- asks chatEventsChan
-            atomically $
-              writeTChan chatEventsChan' $
-                NameEvent
-                  { nameEventRefChan = refChan
-                  , nameEventUserKey = authorPublicKey'
-                  , nameEventUserName = username
-                  }
-        Nothing -> pure ()
-      maybeUsername <- withDB $ selectUsername authorPublicKey' refChan
-      pure $
-        Just
-          DecryptedMessage
-            { decryptedMessageHashRef = messageHashRef
-            , decryptedMessageAuthorKey = authorPublicKey'
-            , decryptedMessageAuthorName = maybeUsername
-            , decryptedMessageChat = refChan
-            , decryptedMessageCreatedAt = createdAt
-            , decryptedMessageBody = deserialiseMessageData messageDataBS
-            }
 
 syncDBWithRefChan :: (MonadUnliftIO m, MonadReader Env m) => MyRefChan -> m ()
 syncDBWithRefChan refChan = do
