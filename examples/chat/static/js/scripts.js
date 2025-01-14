@@ -71,7 +71,13 @@ function handleIncomingWSMessage(message) {
   }
 }
 
-function handleOldMessages(messageElement) {}
+function handleOldMessages(messageElement) {
+  if (messageElement.dataset.initialBatch !== undefined) {
+    // removes spinners
+    document.getElementById("messages").removeAttribute("aria-busy");
+    document.getElementById("members").removeAttribute("aria-busy");
+  }
+}
 
 function handleNewMessage(messageElement) {
   if (isOwnMessage(messageElement)) {

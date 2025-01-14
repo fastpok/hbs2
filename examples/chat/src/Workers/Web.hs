@@ -174,7 +174,7 @@ receiveLoop conn sessionID = forever do
         WS.sendTextData conn $
           WSProtocolServerMessageOldMessages $
             WSOldMessages
-              { wsOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML
+              { wsOldMessagesIsInitialBatch = True
               , wsOldMessages = messagesToWSMessages messages
               }
       addSessionMessageHashRefs sessionID $ getHashRefsFromMessages messages
@@ -193,7 +193,7 @@ receiveLoop conn sessionID = forever do
         WS.sendTextData conn $
           WSProtocolServerMessageOldMessages $
             WSOldMessages
-              { wsOldMessagesHXSwap = WSOldMessagesHXSwapBeforeEnd
+              { wsOldMessagesIsInitialBatch = False
               , wsOldMessages = messagesToWSMessages messages
               }
       addSessionMessageHashRefs sessionID $ getHashRefsFromMessages messages
