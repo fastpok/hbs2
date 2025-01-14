@@ -78,6 +78,7 @@ executable chat
                   , DB
                   , Env
                   , Error
+                  , Log
                   , Message
                   , Monad
                   , Pages.Login
@@ -110,6 +111,7 @@ executable chat
                   , microlens-mtl
                   , mtl
                   , prettyprinter
+                  , prettyprinter-ansi-terminal
                   , saltine
                   , scotty
                   , serialise
