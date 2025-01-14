@@ -4,11 +4,12 @@ import Config
 import Control.Monad
 import Control.Monad.Reader
 import Env
+import Log
 import UnliftIO
 import Workers
 
 main :: IO ()
-main = do
+main = withLogging do
   config <- getConfig
   env <- initEnv config
   workers <- runReaderT runWorkers env

@@ -26,6 +26,7 @@ import HBS2.Peer.RPC.Client.Unix hiding (encode)
 import HBS2.Prelude hiding (line)
 import HBS2.Storage
 import Lens.Micro.Mtl
+import Log
 import Message
 import Streaming.Prelude qualified as S
 import Types
@@ -36,7 +37,7 @@ refChanWorker = do
   refChans' <- asks (refChans . config)
   case refChans' of
     [] -> do
-      liftIO $ putStrLn "No refchans found in the config"
+      warn "No refchans found in the config"
       pure ()
     someRefChans -> do
       chatEventsChan' <- asks chatEventsChan

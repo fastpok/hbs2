@@ -23,6 +23,7 @@ import HBS2.Peer.RPC.API.RefChan
 import HBS2.Peer.RPC.Client.StorageClient
 import HBS2.Peer.RPC.Client.Unix hiding (encode)
 import HBS2.Storage
+import Log
 import Message
 import Monad
 import Network.Wai qualified as Wai
@@ -43,7 +44,7 @@ webWorker = do
   let settings = Warp.setPort port Warp.defaultSettings
   scottyApp <- makeScottyApp
   env <- ask
-  liftIO $ putStrLn $ "Running server on port " <> show port
+  info $ green $ "Running server on port " <> pretty port
   liftIO $ Warp.runSettings settings $ WaiWS.websocketsOr WS.defaultConnectionOptions (wsApp env) scottyApp
 
 makeScottyApp :: (MonadReader Env m, MonadUnliftIO m) => m Wai.Application
