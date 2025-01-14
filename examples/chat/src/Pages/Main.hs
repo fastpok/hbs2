@@ -179,6 +179,8 @@ handleChatSelect =
 on click
   set #messages.innerHTML to ''
   set #members.innerHTML to ''
+  add @aria-busy='true' to #messages
+  add @aria-busy='true' to #members
   remove .active from .chat-button
   add .active to me
   add .hidden to #chat-placeholder
@@ -224,6 +226,8 @@ handleWSClose =
 on htmx:wsClose or htmx:wsError
   set #messages.innerHTML to ''
   set #members.innerHTML to ''
+  remove @aria-busy from #messages
+  remove @aria-busy from #members
   remove .active from .chat-button
   add @disabled to .chat-button
   add .hidden to #chat

@@ -463,3 +463,11 @@
 [data-theme=dark] .error-text {
   color: var(--pico-color-red-600);
 }
+
+#messages[aria-busy=true],
+#members[aria-busy=true] {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}

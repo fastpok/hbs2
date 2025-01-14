@@ -257,18 +257,12 @@ instance FromJSON WSGetMessages where
     wsGetMessagesLimit <- v .: "limit"
     pure $ WSGetMessages{..}
 
-data WSOldMessagesHXSwap = WSOldMessagesHXSwapInnerHTML | WSOldMessagesHXSwapBeforeEnd
-
-hxSwapToText :: WSOldMessagesHXSwap -> Text
-hxSwapToText WSOldMessagesHXSwapInnerHTML = "innerHTML"
-hxSwapToText WSOldMessagesHXSwapBeforeEnd = "beforeend"
-
 newtype MessageSkeleton = MessageSkeleton MyHashRef
 
 data MessageOrSkeleton = MessageOrSkeletonMessage DecryptedMessage | MessageOrSkeletonSkeleton MessageSkeleton
 
 data WSOldMessages = WSOldMessages
-  { wsOldMessagesHXSwap :: WSOldMessagesHXSwap
+  { wsOldMessagesIsInitialBatch :: Bool
   , wsOldMessages :: [MessageOrSkeleton]
   }
 
@@ -399,16 +393,21 @@ mapMLast_ fRest fLast (x : xs) = do
   mapMLast_ fRest fLast xs
 
 instance ToHtml WSOldMessages where
-  toHtml (WSOldMessages{..}) = div_
-    [ id_ "messages"
-    , hxSwapOOB_ $ hxSwapToText wsOldMessagesHXSwap
-    , data_ "message-type" "old-messages"
-    ]
-    do
-      mapMLast_
-        (oldMessageToHtml DontApplyInfiniteScrollAttrs)
-        (oldMessageToHtml ApplyInfiniteScrollAttrs)
-        wsOldMessages
+  toHtml (WSOldMessages{..}) = div_ attrs' do
+    mapMLast_
+      (oldMessageToHtml DontApplyInfiniteScrollAttrs)
+      (oldMessageToHtml ApplyInfiniteScrollAttrs)
+      wsOldMessages
+   where
+    attrs =
+      [ id_ "messages"
+      , hxSwapOOB_ "beforeend"
+      , data_ "message-type" "old-messages"
+      ]
+    attrs' =
+      if wsOldMessagesIsInitialBatch
+        then data_ "initial-batch" "" : attrs
+        else attrs
   toHtmlRaw = toHtml
 
 instance ToHtml WSNewMessage where
