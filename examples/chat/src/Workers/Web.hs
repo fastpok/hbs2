@@ -26,10 +26,12 @@ import HBS2.Storage
 import Log
 import Message
 import Monad
+import Network.HTTP.Types
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp qualified as Warp
 import Network.Wai.Handler.WebSockets qualified as WaiWS
 import Network.Wai.Middleware.Static
+import Network.Wai.Parse (FileInfo (..))
 import Network.WebSockets qualified as WS
 import Pages.Login
 import Pages.Main
@@ -61,6 +63,14 @@ myScottyApp staticPath = do
   defaultHandler exceptionHandler
   get "/" mainPage
   get "/login" loginPage
+  post "/upload" uploadHandler
+
+uploadHandler :: (MonadUnliftIO m) => ActionT m ()
+uploadHandler = do
+  uploadedFiles <- files
+  let sizes = map (BSL.length . fileContent . snd) uploadedFiles
+  mapM_ (warn . pretty @Integer . fromIntegral) sizes
+  status status200
 
 wsApp :: Env -> WS.ServerApp
 wsApp env pending = do

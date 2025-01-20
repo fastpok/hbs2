@@ -131,16 +131,16 @@ sendFilesModal = dialog_ [id_ "send-files-modal"] $
       h3_ "Send files"
     form_
       [ id_ "files-message-form"
-      , wsSend_ ""
-      , hxVals_ "{\"type\": \"files-message\"}"
+      , hxPost_ "/upload"
+      , hxSwap_ "none"
+      , enctype_ "multipart/form-data"
       , data_ "target" "send-files-modal"
       , onsubmit_ "toggleModal(event)"
-      , handleFilesMessageWSConfigSend
       ]
       $ input_
         [ id_ "files-input"
         , type_ "file"
-        , name_ "filesUpload"
+        , name_ "uploadedFiles"
         , multiple_ ""
         , required_ ""
         , autofocus_
@@ -279,12 +279,4 @@ on keydown[(key is 'Enter') and ctrlKey]
 on submit from #message-form
   set my.value to ''
   {autoresizeMessageInput}
-|]
-
-handleFilesMessageWSConfigSend :: Attribute
-handleFilesMessageWSConfigSend =
-  hyper_
-    [qc|
-on htmx:wsConfigSend
-  call handleFilesMessageWSConfigSend(event)
 |]

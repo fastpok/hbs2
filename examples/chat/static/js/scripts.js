@@ -88,55 +88,11 @@ function handleNewMessage(messageElement) {
   }
 }
 
-function handleMembers(messageElement) {}
+function handleMembers(messageElement) { }
 
 function getOutgoingWSMessageType(message) {
   const messageObject = JSON.parse(message);
   return messageObject.type;
-}
-
-async function handleFilesMessageWSConfigSend(event) {
-  // Unfortunately, there is no such event for websockets as htmx:confirm (https://htmx.org/events/#htmx:confirm),
-  // so we cancel event and call socketWrapper.send manually
-  event.preventDefault();
-  const newFilesMessageBody = await getNewFilesMessageBody(
-    event.detail.parameters
-  );
-  event.detail.socketWrapper.send(newFilesMessageBody, event.detail.elt);
-}
-
-async function getNewFilesMessageBody(eventParams) {
-  const files = eventParams.filesUpload;
-  let newMessage;
-  const readFilePromises = [];
-  if (Array.isArray(files)) {
-    files.forEach((file) => readFilePromises.push(readFileAsDataURL(file)));
-    newMessage = await Promise.all(readFilePromises);
-  } else {
-    newMessage = [await readFileAsDataURL(files)];
-  }
-  const newMessageBody = {
-    type: eventParams.type,
-    message: newMessage,
-  };
-  return JSON.stringify(newMessageBody);
-}
-
-function readFileAsDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = {
-        dataURL: reader.result,
-        filename: file.name,
-      };
-      resolve(result);
-    };
-    reader.onerror = () => {
-      reject(new Error("Failed to read the file"));
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 function handlePaste(event) {

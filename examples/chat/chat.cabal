@@ -126,6 +126,7 @@ executable chat
                   , unordered-containers
                   , uuid
                   , wai
+                  , wai-extra
                   , wai-middleware-static
                   , wai-websockets
                   , warp

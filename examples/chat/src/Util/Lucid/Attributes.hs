@@ -12,6 +12,9 @@ ariaLive_ = makeAttribute "aira-live"
 hyper_ :: Text -> Attribute
 hyper_ = makeAttribute "_"
 
+hxPost_ :: Text -> Attribute
+hxPost_ = makeAttribute "hx-post"
+
 hxTrigger_ :: Text -> Attribute
 hxTrigger_ = makeAttribute "hx-trigger"
 
